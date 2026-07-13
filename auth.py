@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
+import requests
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
 
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24 * 7  # 7 days
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +80,11 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str
+    account_type: str = "individual"  # 'individual' | 'agency_owner' | 'agent'
 
 
 # ---------------------------------------------------------------------------
@@ -145,3 +152,58 @@ def me(user: dict = Depends(get_current_user)):
         "plan_name": user["plan_name"],
         "is_platform_owner": bool(user["is_platform_owner"]),
     }
+
+
+@router.post("/google")
+def google_auth(body: GoogleAuthRequest):
+    # Verify the token server-side against Google directly - never trust the
+    # client-side token claims alone. Same approach already proven in n8n.
+    resp = requests.get(
+        "https://oauth2.googleapis.com/tokeninfo",
+        params={"id_token": body.credential},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Google sign-in could not be verified.")
+    info = resp.json()
+    if info.get("aud") != GOOGLE_CLIENT_ID or info.get("email_verified") != "true":
+        raise HTTPException(status_code=401, detail="Google sign-in could not be verified.")
+
+    email = info["email"].strip().lower()
+    full_name = info.get("name", email.split("@")[0])
+
+    existing = run_query(
+        "SELECT u.id, u.username, u.full_name, u.role, u.is_active, u.tenant_id, "
+        "u.is_platform_owner, t.company_name, t.plan_name, t.subscription_status "
+        "FROM gmaps_users u JOIN tenants t ON t.id = u.tenant_id WHERE u.username = %s;",
+        (email,),
+    )
+
+    if existing:
+        row = existing[0]
+        if not row["is_active"]:
+            raise HTTPException(status_code=403, detail="This account has been deactivated.")
+        if row["subscription_status"] not in ("active", "trialing"):
+            raise HTTPException(status_code=403, detail="Your subscription is not active.")
+        token = create_access_token(row)
+        return {"access_token": token, "token_type": "bearer", "full_name": row["full_name"]}
+
+    # No existing account - only Individual mode may self-create a new tenant.
+    if body.account_type in ("agent", "agency_owner"):
+        raise HTTPException(
+            status_code=404,
+            detail="No account found with this email. If you were given credentials by "
+                   "AutomationGini or your agency admin, make sure you're using the right email.",
+        )
+
+    tenant = run_insert_returning(
+        "INSERT INTO tenants (company_name, plan_name, subscription_status) VALUES (%s, 'Free', 'active') RETURNING id;",
+        (f"{full_name}'s Team",),
+    )
+    user = run_insert_returning(
+        "INSERT INTO gmaps_users (username, password_hash, full_name, role, tenant_id) "
+        "VALUES (%s,%s,%s,'admin',%s) RETURNING id, username, full_name, role, tenant_id;",
+        (email, bcrypt.hashpw(secrets.token_hex(16).encode(), bcrypt.gensalt()).decode(), full_name, tenant["id"]),
+    )
+    token = create_access_token(user)
+    return {"access_token": token, "token_type": "bearer", "full_name": full_name}
