@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 import auth
+import dashboard
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -41,6 +42,7 @@ async def preflight_handler(request: Request, rest_of_path: str = ""):
 
 
 app.include_router(auth.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")
