@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import LogoLight from '../assets/logo-light-bg.svg'
 
-const CRM_URL = 'https://automationgini-crm.onrender.com'
+const CRM_URL = 'https://automationgini-crmv2.onrender.com'
 const API_BASE = 'https://automationgini-api.onrender.com'
 const SIGNUP_API = `${API_BASE}/auth/signup`
 const LOGIN_API = `${API_BASE}/auth/login`
