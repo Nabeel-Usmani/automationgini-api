@@ -4,6 +4,11 @@ from fastapi.responses import Response
 
 import auth
 import dashboard
+import leads
+import demo
+import build
+import search
+import billing
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -43,6 +48,11 @@ async def preflight_handler(request: Request, rest_of_path: str = ""):
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)
+app.include_router(leads.router)
+app.include_router(demo.router)
+app.include_router(build.router)
+app.include_router(search.router)
+app.include_router(billing.router)
 
 
 @app.get("/health")
