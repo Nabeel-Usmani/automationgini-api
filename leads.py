@@ -25,6 +25,7 @@ def list_leads(
     niche: Optional[str] = None,
     status: Optional[str] = None,
     source: Optional[str] = None,
+    high_potential_only: bool = False,
     user: dict = Depends(get_current_user),
 ):
     scope_sql, params = _scope_clause(user, "l")
@@ -39,10 +40,13 @@ def list_leads(
         extra += " AND l.call_status = %s"; params.append(status)
     if source:
         extra += " AND l.source = %s"; params.append(source)
+    if high_potential_only:
+        extra += " AND l.review_count BETWEEN 1 AND 15 AND l.total_score < 4"
 
     rows = run_query(
-        f"SELECT l.id, l.business_name, l.niche, l.phone_number, l.city, l.country, l.country_code, "
-        f"l.review_count, l.total_score, l.website, l.website_status, l.call_status, l.source, l.scraped_at "
+        f"SELECT l.id, l.business_name, l.niche, l.phone_number, l.email, l.city, l.country, l.country_code, "
+        f"l.review_count, l.total_score, l.website, l.website_status, l.call_status, l.source, l.scraped_at, "
+        f"(l.review_count BETWEEN 1 AND 15 AND l.total_score < 4) AS is_high_potential "
         f"FROM gmaps_leads l WHERE {scope_sql}{extra} ORDER BY l.scraped_at DESC LIMIT 500;",
         tuple(params),
     )
