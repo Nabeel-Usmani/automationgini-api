@@ -53,19 +53,28 @@ def list_leads(
     return rows
 
 
+STATUS_OPTIONS = ["New", "Called", "Interested", "Not Interested", "Follow-up"]
+
+
 @router.get("/filter-options")
 def leads_filter_options(user: dict = Depends(get_current_user)):
     scope_sql, params = _scope_clause(user, "l")
     niches = run_query(f"SELECT DISTINCT niche FROM gmaps_leads l WHERE {scope_sql} ORDER BY niche;", tuple(params))
     countries = run_query(f"SELECT DISTINCT country FROM gmaps_leads l WHERE {scope_sql} ORDER BY country;", tuple(params))
     cities = run_query(f"SELECT DISTINCT city FROM gmaps_leads l WHERE {scope_sql} ORDER BY city;", tuple(params))
-    statuses = run_query(f"SELECT DISTINCT call_status FROM gmaps_leads l WHERE {scope_sql} ORDER BY call_status;", tuple(params))
     return {
         "niches": [r["niche"] for r in niches],
         "countries": [r["country"] for r in countries],
         "cities": [r["city"] for r in cities],
-        "statuses": [r["call_status"] for r in statuses],
+        "statuses": STATUS_OPTIONS,
     }
+
+
+@router.delete("/{lead_id}")
+def delete_lead(lead_id: int, user: dict = Depends(get_current_user)):
+    scope_sql, params = _scope_clause(user, "gmaps_leads")
+    run_command(f"DELETE FROM gmaps_leads WHERE id = %s AND {scope_sql};", tuple([lead_id] + params))
+    return {"success": True}
 
 
 class CustomListingRequest(BaseModel):
@@ -89,6 +98,8 @@ def add_custom_listing(body: CustomListingRequest, user: dict = Depends(get_curr
 
 @router.post("/{lead_id}/status")
 def update_lead_status(lead_id: int, status: str, user: dict = Depends(get_current_user)):
+    if status not in STATUS_OPTIONS:
+        raise HTTPException(status_code=400, detail=f"Status must be one of: {', '.join(STATUS_OPTIONS)}")
     scope_sql, params = _scope_clause(user, "gmaps_leads")
     run_command(
         f"UPDATE gmaps_leads SET call_status = %s, status_updated_at = NOW() "
