@@ -100,7 +100,7 @@ def build_website_preview(body: WebsitePreviewRequest, user: dict = Depends(get_
     resp = requests.post(
         WEBSITE_PREVIEW_WEBHOOK_URL,
         json={"lead_id": body.lead_id, "agent_id": user["id"], "tenant_id": user["tenant_id"], "product_type": body.product_type},
-        timeout=240,
+        timeout=20,
     )
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text[:300])
@@ -112,7 +112,22 @@ def website_previews_created(user: dict = Depends(get_current_user)):
     scope_sql, params = _scope_clause(user, "p")
     return run_query(
         f"SELECT p.id, p.lead_id, l.business_name, l.niche, l.city, p.preview_token, p.preview_expires_at, "
-        f"p.payment_status, p.created_at FROM purchases p JOIN gmaps_leads l ON l.id = p.lead_id "
+        f"p.payment_status, p.fulfillment_status, p.created_at FROM purchases p JOIN gmaps_leads l ON l.id = p.lead_id "
         f"WHERE p.product_type IN ('website_html','website_react') AND {scope_sql} ORDER BY p.created_at DESC;",
         tuple(params),
     )
+
+
+@router.get("/website/{purchase_id}/status")
+def website_preview_status(purchase_id: int, user: dict = Depends(get_current_user)):
+    scope_sql, params = _scope_clause(user, "p")
+    rows = run_query(
+        f"SELECT p.id, p.fulfillment_status, p.preview_token, "
+        f"jsonb_object_keys(p.fulfillment_detail->'pages') AS page_key "
+        f"FROM purchases p WHERE p.id = %s AND {scope_sql};",
+        tuple([purchase_id] + params),
+    )
+    pages_done = [r["page_key"] for r in rows]
+    status = rows[0]["fulfillment_status"] if rows else None
+    token = rows[0]["preview_token"] if rows else None
+    return {"fulfillment_status": status, "preview_token": token, "pages_done": pages_done, "pages_total": 4}
