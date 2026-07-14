@@ -22,9 +22,18 @@ class SearchRequest(BaseModel):
 
 @router.post("/run")
 def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
+    form_fields = {
+        "Niche": body.niche,
+        "City": body.city,
+        "AgentId": str(user["id"]),
+        "MaxLeads": str(body.max_leads),
+    }
+    # n8n Form Trigger nodes expect a real multipart/form-data submission (what an
+    # actual HTML <form> sends), not application/x-www-form-urlencoded. Forcing
+    # multipart encoding here even though there's no file involved.
     resp = requests.post(
         SEARCH_WEBHOOK_URL,
-        data={"Niche": body.niche, "City": body.city, "AgentId": str(user["id"]), "MaxLeads": str(body.max_leads)},
+        files={k: (None, v) for k, v in form_fields.items()},
         timeout=20,
     )
     if resp.status_code >= 400:
