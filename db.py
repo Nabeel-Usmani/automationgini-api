@@ -23,19 +23,24 @@ def _fresh_connection():
 
 
 def run_query(sql: str, params: tuple = ()):
-    """Read-only query, returns a list of dicts. Never commits (matches the
-    Streamlit CRM's exact run_query semantics - safe for SELECTs only)."""
+    """Read-only query, returns a list of dicts. Explicitly ends the transaction
+    after reading - leaving it open (the previous behavior) causes connections to
+    sit 'idle in transaction' indefinitely, holding locks that can block other
+    operations (this was a real, confirmed bug: a stale read left open for 51
+    minutes blocked a schema migration)."""
     conn = get_connection()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
+        conn.commit()
         return [dict(r) for r in rows]
     except (psycopg2.InterfaceError, psycopg2.OperationalError):
         conn = _fresh_connection()
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
+        conn.commit()
         return [dict(r) for r in rows]
 
 
