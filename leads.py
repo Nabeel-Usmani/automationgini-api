@@ -29,7 +29,7 @@ def list_leads(
     user: dict = Depends(get_current_user),
 ):
     scope_sql, params = _scope_clause(user, "l")
-    extra = ""
+    extra = " AND l.is_archived = false"
     if country:
         extra += " AND l.country = %s"; params.append(country)
     if city:
@@ -75,6 +75,58 @@ def delete_lead(lead_id: int, user: dict = Depends(get_current_user)):
     scope_sql, params = _scope_clause(user, "gmaps_leads")
     run_command(f"DELETE FROM gmaps_leads WHERE id = %s AND {scope_sql};", tuple([lead_id] + params))
     return {"success": True}
+
+
+class BulkActionRequest(BaseModel):
+    lead_ids: list[int]
+
+
+@router.post("/bulk-archive")
+def bulk_archive(body: BulkActionRequest, user: dict = Depends(get_current_user)):
+    if not body.lead_ids:
+        return {"success": True, "affected": 0}
+    scope_sql, params = _scope_clause(user, "gmaps_leads")
+    run_command(
+        f"UPDATE gmaps_leads SET is_archived = true WHERE id = ANY(%s) AND {scope_sql};",
+        tuple([body.lead_ids] + params),
+    )
+    return {"success": True, "affected": len(body.lead_ids)}
+
+
+@router.post("/bulk-unarchive")
+def bulk_unarchive(body: BulkActionRequest, user: dict = Depends(get_current_user)):
+    if not body.lead_ids:
+        return {"success": True, "affected": 0}
+    scope_sql, params = _scope_clause(user, "gmaps_leads")
+    run_command(
+        f"UPDATE gmaps_leads SET is_archived = false WHERE id = ANY(%s) AND {scope_sql};",
+        tuple([body.lead_ids] + params),
+    )
+    return {"success": True, "affected": len(body.lead_ids)}
+
+
+@router.post("/bulk-delete")
+def bulk_delete(body: BulkActionRequest, user: dict = Depends(get_current_user)):
+    if not body.lead_ids:
+        return {"success": True, "affected": 0}
+    scope_sql, params = _scope_clause(user, "gmaps_leads")
+    run_command(
+        f"DELETE FROM gmaps_leads WHERE id = ANY(%s) AND {scope_sql};",
+        tuple([body.lead_ids] + params),
+    )
+    return {"success": True, "affected": len(body.lead_ids)}
+
+
+@router.get("/archived")
+def list_archived_leads(user: dict = Depends(get_current_user)):
+    scope_sql, params = _scope_clause(user, "l")
+    rows = run_query(
+        f"SELECT l.id, l.business_name, l.niche, l.phone_number, l.email, l.city, l.country, l.country_code, "
+        f"l.review_count, l.total_score, l.website, l.website_status, l.call_status, l.source, l.scraped_at "
+        f"FROM gmaps_leads l WHERE {scope_sql} AND l.is_archived = true ORDER BY l.scraped_at DESC LIMIT 500;",
+        tuple(params),
+    )
+    return rows
 
 
 class CustomListingRequest(BaseModel):
