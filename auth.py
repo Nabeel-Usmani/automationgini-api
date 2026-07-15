@@ -9,7 +9,7 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
 
-from db import run_query, run_insert_returning
+from db import run_query, run_command, run_insert_returning
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -152,6 +152,35 @@ def me(user: dict = Depends(get_current_user)):
         "plan_name": user["plan_name"],
         "is_platform_owner": bool(user["is_platform_owner"]),
     }
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: str
+
+
+@router.patch("/profile")
+def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_user)):
+    if not body.full_name.strip():
+        raise HTTPException(status_code=400, detail="Name can't be empty.")
+    run_command("UPDATE gmaps_users SET full_name = %s WHERE id = %s;", (body.full_name.strip(), user["id"]))
+    return {"success": True}
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+def change_password(body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    rows = run_query("SELECT password_hash FROM gmaps_users WHERE id = %s;", (user["id"],))
+    if not rows or not bcrypt.checkpw(body.current_password.encode(), rows[0]["password_hash"].encode()):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password needs to be at least 8 characters.")
+    new_hash = bcrypt.hashpw(body.new_password.encode(), bcrypt.gensalt()).decode()
+    run_command("UPDATE gmaps_users SET password_hash = %s WHERE id = %s;", (new_hash, user["id"]))
+    return {"success": True}
 
 
 @router.post("/google")
