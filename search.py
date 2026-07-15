@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from auth import get_current_user
+from db import run_query
+from billing import PLAN_DEFINITIONS
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -71,6 +73,24 @@ class SearchRequest(BaseModel):
 def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
     if not body.cities:
         raise HTTPException(status_code=400, detail="Select at least one city.")
+
+    # Real cap enforcement - this was previously missing entirely, meaning
+    # searches ran with no limit regardless of plan (confirmed: a Free-plan
+    # account had scraped 110 leads despite a 100/month cap).
+    plan = PLAN_DEFINITIONS.get(user["plan_name"], PLAN_DEFINITIONS["Free"])
+    lead_cap = plan.get("leads")
+    if lead_cap is not None:
+        used_rows = run_query(
+            "SELECT COUNT(*) AS n FROM gmaps_leads WHERE tenant_id = %s "
+            "AND scraped_at >= date_trunc('month', NOW());",
+            (user["tenant_id"],),
+        )
+        used = used_rows[0]["n"]
+        if used >= lead_cap:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You've reached your plan's {lead_cap}-lead monthly limit ({used} used). Upgrade your plan to continue searching.",
+            )
 
     started = []
     errors = []
