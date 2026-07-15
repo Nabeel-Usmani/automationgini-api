@@ -1,3 +1,4 @@
+import os
 import requests
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
@@ -6,6 +7,8 @@ from auth import get_current_user
 from db import run_query, run_command, run_insert_returning
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 
 def _scope_clause(user: dict, alias: str = "l") -> tuple[str, list]:
@@ -102,18 +105,22 @@ def log_call(lead_id: int, user: dict = Depends(get_current_user)):
 
 
 def _geocode_city(city: str, country: str):
-    """Nominatim (OpenStreetMap) free geocoding - no API key required. Results are
-    cached in city_coordinates so this only ever runs once per city."""
+    """Google Geocoding API - switched from Nominatim (free tier hit real rate
+    limits repeatedly during testing). Results are cached in city_coordinates
+    so this only ever runs once per city regardless."""
+    if not GOOGLE_API_KEY:
+        return None, None
     try:
         resp = requests.get(
-            "https://nominatim.openstreetmap.org/search",
-            params={"city": city, "country": country, "format": "json", "limit": 1},
-            headers={"User-Agent": "AutomationGini/1.0"},
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={"address": city, "key": GOOGLE_API_KEY},
             timeout=8,
         )
-        results = resp.json()
+        data = resp.json()
+        results = data.get("results", [])
         if results:
-            return float(results[0]["lat"]), float(results[0]["lon"])
+            loc = results[0]["geometry"]["location"]
+            return loc["lat"], loc["lng"]
     except Exception:
         pass
     return None, None
