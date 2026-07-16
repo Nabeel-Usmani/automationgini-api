@@ -90,6 +90,7 @@ def chatbot_demos_created(user: dict = Depends(get_current_user)):
 class WebsitePreviewRequest(BaseModel):
     lead_id: int
     product_type: str = "website_html"
+    template_id: Optional[str] = None
 
 
 @router.post("/website")
@@ -97,9 +98,21 @@ def build_website_preview(body: WebsitePreviewRequest, user: dict = Depends(get_
     _own_lead_or_403(body.lead_id, user)
     if not WEBSITE_PREVIEW_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="Website preview service not configured.")
+
+    design_brief = None
+    if body.template_id:
+        from templates_data import NORMAL_TEMPLATES, MODERN_TEMPLATES
+        for t in NORMAL_TEMPLATES + MODERN_TEMPLATES:
+            if t["id"] == body.template_id:
+                design_brief = t["design_brief"]
+                break
+
     resp = requests.post(
         WEBSITE_PREVIEW_WEBHOOK_URL,
-        json={"lead_id": body.lead_id, "agent_id": user["id"], "tenant_id": user["tenant_id"], "product_type": body.product_type},
+        json={
+            "lead_id": body.lead_id, "agent_id": user["id"], "tenant_id": user["tenant_id"],
+            "product_type": body.product_type, "template_id": body.template_id, "design_brief": design_brief,
+        },
         timeout=20,
     )
     if resp.status_code >= 400:
