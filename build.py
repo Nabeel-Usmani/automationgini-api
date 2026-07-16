@@ -64,10 +64,19 @@ def voice_agents_created(user: dict = Depends(get_current_user)):
     )
 
 
+class PageConfig(BaseModel):
+    page_key: str
+    page_title: str
+    use_default_content: bool = True
+    custom_content: Optional[str] = None
+
+
 class WebsiteCheckoutRequest(BaseModel):
     lead_id: int
-    product_type: str  # 'website_html' | 'website_react'
+    product_type: str  # 'website_html' | 'website_react' | 'website_react_video'
     purchase_id: Optional[int] = None
+    logo_data_uri: Optional[str] = None
+    pages: Optional[list[PageConfig]] = None
 
 
 @router.post("/website/checkout")
@@ -75,11 +84,18 @@ def website_checkout(body: WebsiteCheckoutRequest, user: dict = Depends(get_curr
     _own_lead_or_403(body.lead_id, user)
     if not CHECKOUT_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="Checkout service not configured.")
+
+    build_config = {
+        "logo_data_uri": body.logo_data_uri,
+        "pages": [p.dict() for p in body.pages] if body.pages else None,
+    }
+
     resp = requests.post(
         CHECKOUT_WEBHOOK_URL,
         json={
             "product_type": body.product_type, "lead_id": body.lead_id, "agent_id": user["id"],
             "tenant_id": user["tenant_id"], "purchase_id": body.purchase_id,
+            "build_config": build_config,
         },
         timeout=20,
     )
