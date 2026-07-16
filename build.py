@@ -31,6 +31,7 @@ class VoiceAgentBuildRequest(BaseModel):
     lead_id: int
     byok_key: str
     custom_instructions: Optional[str] = None
+    language_code: Optional[str] = None
 
 
 @router.post("/voice-agent/checkout")
@@ -43,7 +44,7 @@ def build_voice_agent(body: VoiceAgentBuildRequest, user: dict = Depends(get_cur
         json={
             "product_type": "voice_agent", "lead_id": body.lead_id, "agent_id": user["id"],
             "tenant_id": user["tenant_id"], "byok_key": body.byok_key,
-            "custom_instructions": body.custom_instructions,
+            "custom_instructions": body.custom_instructions, "language_code": body.language_code,
         },
         timeout=20,
     )
