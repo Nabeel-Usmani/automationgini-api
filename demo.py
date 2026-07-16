@@ -113,7 +113,7 @@ def website_previews_created(user: dict = Depends(get_current_user)):
     return run_query(
         f"SELECT p.id, p.lead_id, l.business_name, l.niche, l.city, p.preview_token, p.preview_expires_at, "
         f"p.payment_status, p.fulfillment_status, p.created_at FROM purchases p JOIN gmaps_leads l ON l.id = p.lead_id "
-        f"WHERE p.product_type IN ('website_html','website_react') AND {scope_sql} ORDER BY p.created_at DESC;",
+        f"WHERE p.product_type IN ('website_html','website_react','website_react_video') AND {scope_sql} ORDER BY p.created_at DESC;",
         tuple(params),
     )
 
