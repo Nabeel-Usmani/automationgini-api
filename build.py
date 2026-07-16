@@ -77,6 +77,7 @@ class WebsiteCheckoutRequest(BaseModel):
     purchase_id: Optional[int] = None
     logo_data_uri: Optional[str] = None
     pages: Optional[list[PageConfig]] = None
+    template_id: Optional[str] = None
 
 
 @router.post("/website/checkout")
@@ -85,9 +86,19 @@ def website_checkout(body: WebsiteCheckoutRequest, user: dict = Depends(get_curr
     if not CHECKOUT_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="Checkout service not configured.")
 
+    design_brief = None
+    if body.template_id:
+        from templates_data import NORMAL_TEMPLATES, MODERN_TEMPLATES
+        for t in NORMAL_TEMPLATES + MODERN_TEMPLATES:
+            if t["id"] == body.template_id:
+                design_brief = t["design_brief"]
+                break
+
     build_config = {
         "logo_data_uri": body.logo_data_uri,
         "pages": [p.dict() for p in body.pages] if body.pages else None,
+        "template_id": body.template_id,
+        "design_brief": design_brief,
     }
 
     resp = requests.post(
