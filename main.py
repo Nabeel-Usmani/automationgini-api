@@ -9,6 +9,7 @@ import demo
 import build
 import search
 import billing
+import preview
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -53,6 +54,7 @@ app.include_router(demo.router)
 app.include_router(build.router)
 app.include_router(search.router)
 app.include_router(billing.router)
+app.include_router(preview.router)
 
 
 @app.get("/health")
