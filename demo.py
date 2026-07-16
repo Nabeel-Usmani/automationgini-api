@@ -30,6 +30,7 @@ def _own_lead_or_403(lead_id: int, user: dict):
 class VoiceDemoRequest(BaseModel):
     lead_id: int
     demo_type: str = "bilingual"
+    language_code: Optional[str] = "ar"
 
 
 @router.post("/voice")
@@ -39,7 +40,7 @@ def run_voice_demo(body: VoiceDemoRequest, user: dict = Depends(get_current_user
         raise HTTPException(status_code=500, detail="Voice demo service not configured.")
     resp = requests.post(
         AI_DEMO_WEBHOOK_URL,
-        json={"lead_id": body.lead_id, "demo_type": body.demo_type, "agent_id": user["id"]},
+        json={"lead_id": body.lead_id, "demo_type": body.demo_type, "language_code": body.language_code, "agent_id": user["id"]},
         timeout=15,
     )
     if resp.status_code >= 400:
