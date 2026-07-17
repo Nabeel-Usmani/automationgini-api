@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel
 
 from db import run_query, run_command, run_insert_returning
@@ -62,6 +62,18 @@ def get_current_user(authorization: str = Header(None)) -> dict:
     row = rows[0]
     if row["subscription_status"] not in ("active", "trialing"):
         raise HTTPException(status_code=403, detail="Subscription is not active.")
+
+    # Lightweight heartbeat for "active now" tracking - only writes if the
+    # last heartbeat was more than 60s ago, to avoid a write on every request.
+    try:
+        run_command(
+            "UPDATE gmaps_users SET last_active_at = NOW() WHERE id = %s "
+            "AND (last_active_at IS NULL OR last_active_at < NOW() - INTERVAL '60 seconds');",
+            (row["id"],),
+        )
+    except Exception:
+        pass
+
     return row
 
 
@@ -118,8 +130,35 @@ def signup(body: SignupRequest):
     return {"access_token": token, "token_type": "bearer", "full_name": full_name}
 
 
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+def _capture_login_location(user_id: int, request: Request):
+    """Best-effort IP geolocation on login - never blocks or breaks login if it fails."""
+    try:
+        ip = _client_ip(request)
+        if not ip or ip.startswith("127.") or ip.startswith("192.168.") or ip == "localhost":
+            return
+        resp = requests.get(f"https://free.freeipapi.com/api/json/{ip}", timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            country_code = data.get("countryCode")
+            country_name = data.get("countryName")
+            if country_code:
+                run_command(
+                    "UPDATE gmaps_users SET country_code = %s, country_name = %s WHERE id = %s;",
+                    (country_code, country_name, user_id),
+                )
+    except Exception:
+        pass
+
+
 @router.post("/login")
-def login(body: LoginRequest):
+def login(body: LoginRequest, request: Request):
     email = body.email.strip().lower()
     rows = run_query(
         "SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.is_active, u.tenant_id, "
@@ -135,6 +174,8 @@ def login(body: LoginRequest):
         raise HTTPException(status_code=403, detail="Your subscription is not active.")
     if not bcrypt.checkpw(body.password.encode(), row["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    _capture_login_location(row["id"], request)
 
     token = create_access_token(row)
     return {"access_token": token, "token_type": "bearer", "full_name": row["full_name"]}
