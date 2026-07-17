@@ -5,11 +5,12 @@ from pydantic import BaseModel
 from typing import Optional
 
 from auth import get_current_user
-from db import run_query
+from db import run_query, run_command, run_insert_returning
 
 router = APIRouter(prefix="/build", tags=["build"])
 
 CHECKOUT_WEBHOOK_URL = os.environ.get("CHECKOUT_WEBHOOK_URL", "")
+REVISION_WEBHOOK_URL = os.environ.get("REVISION_WEBHOOK_URL", "https://app.automationgini.com/webhook/request-website-revision")
 CHATBOT_SUBSCRIPTION_WEBHOOK_URL = os.environ.get("CHATBOT_SUBSCRIPTION_WEBHOOK_URL", "")
 EDIT_AGENT_WEBHOOK_URL = os.environ.get("EDIT_AGENT_WEBHOOK_URL", "")
 
@@ -164,3 +165,95 @@ def edit_instructions(body: EditInstructionsRequest, user: dict = Depends(get_cu
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text[:300])
     return resp.json()
+
+
+def _own_purchase_or_403(purchase_id: int, user: dict):
+    rows = run_query("SELECT tenant_id FROM purchases WHERE id = %s;", (purchase_id,))
+    if not rows:
+        raise HTTPException(status_code=404, detail="Site not found.")
+    if rows[0]["tenant_id"] != user["tenant_id"]:
+        raise HTTPException(status_code=403, detail="Not your site.")
+
+
+class RequestRevisionRequest(BaseModel):
+    page_key: str
+    request_text: str
+
+
+@router.post("/website/{purchase_id}/request-change")
+def request_website_change(purchase_id: int, body: RequestRevisionRequest, user: dict = Depends(get_current_user)):
+    _own_purchase_or_403(purchase_id, user)
+    if not body.request_text.strip():
+        raise HTTPException(status_code=400, detail="Describe the change you want.")
+
+    revision_id = run_insert_returning(
+        "INSERT INTO website_revisions (purchase_id, page_key, request_text, requested_by) "
+        "VALUES (%s, %s, %s, %s) RETURNING id;",
+        (purchase_id, body.page_key, body.request_text.strip(), user["id"]),
+    )["id"]
+
+    try:
+        requests.post(REVISION_WEBHOOK_URL, json={"revision_id": revision_id}, timeout=15)
+    except Exception:
+        pass  # Fire-and-forget - the agent polls status instead
+
+    return {"success": True, "revision_id": revision_id}
+
+
+@router.get("/website/{purchase_id}/revisions")
+def list_website_revisions(purchase_id: int, user: dict = Depends(get_current_user)):
+    _own_purchase_or_403(purchase_id, user)
+    rows = run_query(
+        "SELECT id, page_key, request_text, status, created_at, resolved_at, "
+        "revised_html IS NOT NULL AS has_preview "
+        "FROM website_revisions WHERE purchase_id = %s ORDER BY created_at DESC;",
+        (purchase_id,),
+    )
+    return rows
+
+
+@router.post("/website/revisions/{revision_id}/approve")
+def approve_website_revision(revision_id: int, user: dict = Depends(get_current_user)):
+    rows = run_query(
+        "SELECT r.id, r.purchase_id, r.page_key, r.revised_html, r.status, p.tenant_id "
+        "FROM website_revisions r JOIN purchases p ON p.id = r.purchase_id WHERE r.id = %s;",
+        (revision_id,),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Revision not found.")
+    row = rows[0]
+    if row["tenant_id"] != user["tenant_id"]:
+        raise HTTPException(status_code=403, detail="Not your site.")
+    if not row["revised_html"]:
+        raise HTTPException(status_code=400, detail="Revision isn't ready yet.")
+    if row["status"] == "applied":
+        raise HTTPException(status_code=400, detail="Already applied.")
+
+    run_command(
+        "UPDATE purchases SET fulfillment_detail = jsonb_set("
+        "COALESCE(fulfillment_detail, '{\"pages\":{}}'::jsonb), ARRAY['pages', %s], to_jsonb(%s::text)) "
+        "WHERE id = %s;",
+        (row["page_key"], row["revised_html"], row["purchase_id"]),
+    )
+    run_command(
+        "UPDATE website_revisions SET status = 'applied', resolved_at = NOW() WHERE id = %s;",
+        (revision_id,),
+    )
+    return {"success": True}
+
+
+@router.post("/website/revisions/{revision_id}/reject")
+def reject_website_revision(revision_id: int, user: dict = Depends(get_current_user)):
+    rows = run_query(
+        "SELECT r.id, p.tenant_id FROM website_revisions r JOIN purchases p ON p.id = r.purchase_id WHERE r.id = %s;",
+        (revision_id,),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Revision not found.")
+    if rows[0]["tenant_id"] != user["tenant_id"]:
+        raise HTTPException(status_code=403, detail="Not your site.")
+    run_command(
+        "UPDATE website_revisions SET status = 'rejected', resolved_at = NOW() WHERE id = %s;",
+        (revision_id,),
+    )
+    return {"success": True}
