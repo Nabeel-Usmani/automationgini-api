@@ -13,6 +13,7 @@ import preview
 import templates_routes
 import admin
 import audit
+import app_mockup_demo
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -61,6 +62,7 @@ app.include_router(preview.router)
 app.include_router(templates_routes.router)
 app.include_router(admin.router)
 app.include_router(audit.router)
+app.include_router(app_mockup_demo.router)
 
 
 @app.get("/health")
