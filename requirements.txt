@@ -7,3 +7,5 @@ pyjwt==2.10.1
 python-multipart==0.0.20
 pydantic==2.10.3
 requests==2.32.3
+matplotlib==3.9.2
+reportlab==4.2.5
