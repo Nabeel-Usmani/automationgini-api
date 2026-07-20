@@ -31,6 +31,9 @@ def preview_revision(id: int = Query(...)):
     else:
         html = banner + html
     return HTMLResponse(html)
+
+
+@router.get("/preview", response_class=HTMLResponse)
 def serve_preview(preview: str = Query(...), page: str = Query("index")):
     rows = run_query(
         "SELECT fulfillment_detail, fulfillment_status, preview_expires_at "
