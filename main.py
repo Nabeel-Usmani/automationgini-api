@@ -18,6 +18,9 @@ import app_mockup_demo
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
     "https://automationgini-crmv2.onrender.com",
+    "https://automationgini.com",
+    "https://www.automationgini.com",
+    "https://crm.automationgini.com",
     "http://localhost:5173",
     "http://localhost:5174",
 ]
