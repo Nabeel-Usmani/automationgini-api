@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Header, Request, Response
 from pydantic import BaseModel
 
 from db import run_query, run_command, run_insert_returning
@@ -17,6 +17,35 @@ JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24 * 7  # 7 days
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+
+# Shared session cookie, scoped to the whole automationgini.com domain family
+# (website, CRM, and this API are all subdomains of it) so a login on the
+# marketing site is immediately recognized by the CRM with no token-in-URL
+# handoff. Purely additive alongside the existing Bearer-token flow below -
+# either one authenticates a request.
+SESSION_COOKIE_NAME = "ag_session"
+SESSION_COOKIE_DOMAIN = ".automationgini.com"
+
+
+def set_session_cookie(response: Response, token: str):
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        max_age=JWT_EXPIRY_HOURS * 3600,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        domain=SESSION_COOKIE_DOMAIN,
+        path="/",
+    )
+
+
+def clear_session_cookie(response: Response):
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        domain=SESSION_COOKIE_DOMAIN,
+        path="/",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -43,12 +72,19 @@ def decode_access_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid session.")
 
 
-def get_current_user(authorization: str = Header(None)) -> dict:
+def get_current_user(
+    authorization: str = Header(None),
+    ag_session: str = Cookie(None),
+) -> dict:
     """FastAPI dependency - use as `user = Depends(get_current_user)` on any
-    protected route. Expects 'Authorization: Bearer <token>'."""
-    if not authorization or not authorization.startswith("Bearer "):
+    protected route. Accepts either 'Authorization: Bearer <token>' or the
+    shared ag_session cookie - whichever is present."""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+    elif ag_session:
+        token = ag_session
+    else:
         raise HTTPException(status_code=401, detail="Not authenticated.")
-    token = authorization.removeprefix("Bearer ").strip()
     payload = decode_access_token(token)
 
     rows = run_query(
@@ -104,7 +140,7 @@ class GoogleAuthRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/signup")
-def signup(body: SignupRequest):
+def signup(body: SignupRequest, response: Response):
     email = body.email.strip().lower()
     existing = run_query("SELECT id FROM gmaps_users WHERE username = %s;", (email,))
     if existing:
@@ -127,6 +163,7 @@ def signup(body: SignupRequest):
     )
 
     token = create_access_token(user)
+    set_session_cookie(response, token)
     return {"access_token": token, "token_type": "bearer", "full_name": full_name}
 
 
@@ -158,7 +195,7 @@ def _capture_login_location(user_id: int, request: Request):
 
 
 @router.post("/login")
-def login(body: LoginRequest, request: Request):
+def login(body: LoginRequest, request: Request, response: Response):
     email = body.email.strip().lower()
     rows = run_query(
         "SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.is_active, u.tenant_id, "
@@ -178,6 +215,7 @@ def login(body: LoginRequest, request: Request):
     _capture_login_location(row["id"], request)
 
     token = create_access_token(row)
+    set_session_cookie(response, token)
     return {"access_token": token, "token_type": "bearer", "full_name": row["full_name"]}
 
 
@@ -193,6 +231,15 @@ def me(user: dict = Depends(get_current_user)):
         "plan_name": user["plan_name"],
         "is_platform_owner": bool(user["is_platform_owner"]),
     }
+
+
+@router.post("/logout")
+def logout(response: Response):
+    # The session cookie is HttpOnly, so client-side JS can't clear it itself -
+    # this is required, not just a nicety, or a "logged out" user's cookie
+    # would silently keep authenticating them.
+    clear_session_cookie(response)
+    return {"success": True}
 
 
 class UpdateProfileRequest(BaseModel):
@@ -225,7 +272,7 @@ def change_password(body: ChangePasswordRequest, user: dict = Depends(get_curren
 
 
 @router.post("/google")
-def google_auth(body: GoogleAuthRequest):
+def google_auth(body: GoogleAuthRequest, response: Response):
     # Verify the token server-side against Google directly - never trust the
     # client-side token claims alone. Same approach already proven in n8n.
     resp = requests.get(
@@ -256,6 +303,7 @@ def google_auth(body: GoogleAuthRequest):
         if row["subscription_status"] not in ("active", "trialing"):
             raise HTTPException(status_code=403, detail="Your subscription is not active.")
         token = create_access_token(row)
+        set_session_cookie(response, token)
         return {"access_token": token, "token_type": "bearer", "full_name": row["full_name"]}
 
     # No existing account - only Individual mode may self-create a new tenant.
@@ -276,4 +324,5 @@ def google_auth(body: GoogleAuthRequest):
         (email, bcrypt.hashpw(secrets.token_hex(16).encode(), bcrypt.gensalt()).decode(), full_name, tenant["id"]),
     )
     token = create_access_token(user)
+    set_session_cookie(response, token)
     return {"access_token": token, "token_type": "bearer", "full_name": full_name}
