@@ -12,6 +12,7 @@ router = APIRouter(prefix="/demo", tags=["demo"])
 AI_DEMO_WEBHOOK_URL = os.environ.get("AI_DEMO_WEBHOOK_URL", "")
 CHATBOT_DEMO_WEBHOOK_URL = os.environ.get("CHATBOT_DEMO_WEBHOOK_URL", "")
 WEBSITE_PREVIEW_WEBHOOK_URL = os.environ.get("PREVIEW_WEBHOOK_URL", "")
+BUSINESS_CRM_DEMO_WEBHOOK_URL = os.environ.get("BUSINESS_CRM_DEMO_WEBHOOK_URL", "")
 
 
 def _scope_clause(user: dict, alias: str) -> tuple[str, list]:
@@ -128,6 +129,44 @@ def website_previews_created(user: dict = Depends(get_current_user)):
         f"SELECT p.id, p.lead_id, l.business_name, l.niche, l.city, p.preview_token, p.preview_expires_at, "
         f"p.payment_status, p.fulfillment_status, p.created_at FROM purchases p JOIN gmaps_leads l ON l.id = p.lead_id "
         f"WHERE p.product_type IN ('website_html','website_react','website_react_video') AND {scope_sql} ORDER BY p.created_at DESC;",
+        tuple(params),
+    )
+
+
+class BusinessCrmDemoRequest(BaseModel):
+    lead_id: int
+
+
+@router.post("/business-crm")
+def run_business_crm_demo(body: BusinessCrmDemoRequest, user: dict = Depends(get_current_user)):
+    """Free, instant sandbox version of Build My Business CRM - lets an
+    agent show a prospect a working staff portal + booking page before
+    asking them to buy. Same fulfillment pattern as the other demo
+    endpoints: n8n creates the crm_workspaces/crm_staff/crm_services rows
+    (with is_demo=true and a couple of sample appointments) and is expected
+    to return at least {"slug": ...} so the frontend can show the public
+    booking link immediately; a portal_login_url/staff_email if included
+    lets the agent show the staff side too."""
+    _own_lead_or_403(body.lead_id, user)
+    if not BUSINESS_CRM_DEMO_WEBHOOK_URL:
+        raise HTTPException(status_code=500, detail="Business CRM demo service not configured.")
+    resp = requests.post(
+        BUSINESS_CRM_DEMO_WEBHOOK_URL,
+        json={"lead_id": body.lead_id, "tenant_id": user["tenant_id"], "agent_id": user["id"]},
+        timeout=20,
+    )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text[:300])
+    return resp.json()
+
+
+@router.get("/business-crm/created")
+def business_crm_demos_created(user: dict = Depends(get_current_user)):
+    scope_sql, params = _scope_clause(user, "w")
+    return run_query(
+        f"SELECT w.id, w.lead_id, l.business_name AS lead_business_name, w.business_name, w.slug, "
+        f"w.status, w.created_at FROM crm_workspaces w JOIN gmaps_leads l ON l.id = w.lead_id "
+        f"WHERE w.is_demo = true AND {scope_sql} ORDER BY w.created_at DESC;",
         tuple(params),
     )
 
