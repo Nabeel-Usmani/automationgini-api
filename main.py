@@ -17,7 +17,6 @@ import app_mockup_demo
 import portal_auth
 import portal
 import public_booking
-import _temp_migrate  # TEMPORARY - remove after running migrations once, see _temp_migrate.py
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -73,7 +72,6 @@ app.include_router(app_mockup_demo.router)
 app.include_router(portal_auth.router)
 app.include_router(portal.router)
 app.include_router(public_booking.router)
-app.include_router(_temp_migrate.router)  # TEMPORARY
 
 
 @app.get("/health")
