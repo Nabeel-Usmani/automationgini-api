@@ -147,6 +147,63 @@ def chatbots_created(user: dict = Depends(get_current_user)):
     )
 
 
+class CrmServiceConfig(BaseModel):
+    name: str
+    duration_minutes: int
+    price_cents: Optional[int] = None
+
+
+class BusinessCrmCheckoutRequest(BaseModel):
+    lead_id: int
+    business_name: str
+    owner_email: str
+    owner_full_name: str
+    timezone: str = "America/New_York"
+    services: list[CrmServiceConfig] = []
+
+
+@router.post("/business-crm/checkout")
+def business_crm_checkout(body: BusinessCrmCheckoutRequest, user: dict = Depends(get_current_user)):
+    _own_lead_or_403(body.lead_id, user)
+    if not CHECKOUT_WEBHOOK_URL:
+        raise HTTPException(status_code=500, detail="Checkout service not configured.")
+    if not body.business_name.strip() or not body.owner_email.strip():
+        raise HTTPException(status_code=400, detail="Business name and owner email are required.")
+
+    # n8n handles the actual provisioning after payment (same pattern as the
+    # other Build products) - creating crm_workspaces/crm_staff/crm_services
+    # rows and emailing the owner their set-password invite link.
+    build_config = {
+        "business_name": body.business_name.strip(),
+        "owner_email": body.owner_email.strip().lower(),
+        "owner_full_name": body.owner_full_name.strip(),
+        "timezone": body.timezone,
+        "services": [s.dict() for s in body.services],
+    }
+    resp = requests.post(
+        CHECKOUT_WEBHOOK_URL,
+        json={
+            "product_type": "business_crm", "lead_id": body.lead_id, "agent_id": user["id"],
+            "tenant_id": user["tenant_id"], "build_config": build_config,
+        },
+        timeout=20,
+    )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text[:300])
+    return resp.json()
+
+
+@router.get("/business-crm/created")
+def business_crms_created(user: dict = Depends(get_current_user)):
+    scope_sql, params = _scope_clause(user, "w")
+    return run_query(
+        f"SELECT w.id, w.lead_id, l.business_name AS lead_business_name, w.business_name, w.slug, "
+        f"w.timezone, w.status, w.created_at FROM crm_workspaces w "
+        f"JOIN gmaps_leads l ON l.id = w.lead_id WHERE {scope_sql} ORDER BY w.created_at DESC;",
+        tuple(params),
+    )
+
+
 class EditInstructionsRequest(BaseModel):
     config_id: int
     agent_type: str  # 'voice_agent' | 'chatbot'

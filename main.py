@@ -14,6 +14,9 @@ import templates_routes
 import admin
 import audit
 import app_mockup_demo
+import portal_auth
+import portal
+import public_booking
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -66,6 +69,9 @@ app.include_router(templates_routes.router)
 app.include_router(admin.router)
 app.include_router(audit.router)
 app.include_router(app_mockup_demo.router)
+app.include_router(portal_auth.router)
+app.include_router(portal.router)
+app.include_router(public_booking.router)
 
 
 @app.get("/health")
