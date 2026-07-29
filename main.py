@@ -18,6 +18,8 @@ import portal_auth
 import portal
 import public_booking
 import agent_ops
+import survey
+import calendly
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -75,6 +77,8 @@ app.include_router(portal_auth.router)
 app.include_router(portal.router)
 app.include_router(public_booking.router)
 app.include_router(agent_ops.router)
+app.include_router(survey.router)
+app.include_router(calendly.router)
 
 
 @app.get("/health")
