@@ -163,6 +163,7 @@ def signup(body: SignupRequest, request: Request, response: Response):
     )
 
     _capture_login_location(user["id"], request)
+    _increment_login_count(user["id"])
 
     token = create_access_token(user)
     set_session_cookie(response, token)
@@ -174,6 +175,19 @@ def _client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else ""
+
+
+def _increment_login_count(user_id: int):
+    """Counts this as a session start (signup or login) - drives the
+    survey.py rule of never showing on the first-ever session, then showing
+    from the second session onward."""
+    try:
+        run_command(
+            "UPDATE gmaps_users SET login_count = COALESCE(login_count, 0) + 1 WHERE id = %s;",
+            (user_id,),
+        )
+    except Exception:
+        pass
 
 
 def _capture_login_location(user_id: int, request: Request):
@@ -215,6 +229,7 @@ def login(body: LoginRequest, request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     _capture_login_location(row["id"], request)
+    _increment_login_count(row["id"])
 
     token = create_access_token(row)
     set_session_cookie(response, token)
@@ -305,6 +320,7 @@ def google_auth(body: GoogleAuthRequest, request: Request, response: Response):
         if row["subscription_status"] not in ("active", "trialing"):
             raise HTTPException(status_code=403, detail="Your subscription is not active.")
         _capture_login_location(row["id"], request)
+        _increment_login_count(row["id"])
         token = create_access_token(row)
         set_session_cookie(response, token)
         return {"access_token": token, "token_type": "bearer", "full_name": row["full_name"]}
@@ -327,6 +343,7 @@ def google_auth(body: GoogleAuthRequest, request: Request, response: Response):
         (email, bcrypt.hashpw(secrets.token_hex(16).encode(), bcrypt.gensalt()).decode(), full_name, tenant["id"]),
     )
     _capture_login_location(user["id"], request)
+    _increment_login_count(user["id"])
     token = create_access_token(user)
     set_session_cookie(response, token)
     return {"access_token": token, "token_type": "bearer", "full_name": full_name}

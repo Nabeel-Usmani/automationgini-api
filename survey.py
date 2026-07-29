@@ -30,6 +30,7 @@ class SurveyResponse(BaseModel):
     rating: int
     likely_to_reuse: int
     willingness_to_pay: Optional[float] = None
+    suggestions: Optional[str] = None
 
 
 @router.post("/submit")
@@ -45,9 +46,12 @@ def submit_survey(body: SurveyResponse, user: dict = Depends(get_current_user)):
     session_number = rows[0]["login_count"] if rows else None
 
     run_command(
-        "INSERT INTO user_surveys (user_id, trigger_type, session_number, rating, likely_to_reuse, willingness_to_pay) "
-        "VALUES (%s, %s, %s, %s, %s, %s);",
-        (user["id"], body.trigger_type, session_number, body.rating, body.likely_to_reuse, body.willingness_to_pay),
+        "INSERT INTO user_surveys (user_id, trigger_type, session_number, rating, likely_to_reuse, willingness_to_pay, suggestions) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s);",
+        (
+            user["id"], body.trigger_type, session_number, body.rating, body.likely_to_reuse,
+            body.willingness_to_pay, (body.suggestions.strip() if body.suggestions else None),
+        ),
     )
     return {"success": True}
 
@@ -67,7 +71,7 @@ def survey_results(user: dict = Depends(get_current_user)):
     )[0]
 
     recent = run_query(
-        "SELECT s.trigger_type, s.rating, s.likely_to_reuse, s.willingness_to_pay, s.created_at, "
+        "SELECT s.trigger_type, s.rating, s.likely_to_reuse, s.willingness_to_pay, s.suggestions, s.created_at, "
         "u.full_name, u.username, u.country_name, u.country_code "
         "FROM user_surveys s JOIN gmaps_users u ON u.id = s.user_id "
         "ORDER BY s.created_at DESC LIMIT 100;"
