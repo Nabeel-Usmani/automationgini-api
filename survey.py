@@ -77,4 +77,12 @@ def survey_results(user: dict = Depends(get_current_user)):
         "ORDER BY s.created_at DESC LIMIT 100;"
     )
 
-    return {"summary": summary, "recent": recent}
+    by_country_rating = run_query(
+        "SELECT COALESCE(u.country_name, 'Unknown') AS country_name, "
+        "COALESCE(u.country_code, '') AS country_code, s.rating, COUNT(*) AS n "
+        "FROM user_surveys s JOIN gmaps_users u ON u.id = s.user_id "
+        "GROUP BY country_name, country_code, s.rating "
+        "ORDER BY country_name, s.rating;"
+    )
+
+    return {"summary": summary, "recent": recent, "by_country_rating": by_country_rating}
