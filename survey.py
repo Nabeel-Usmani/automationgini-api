@@ -13,13 +13,17 @@ def check_survey_needed(trigger: str, user: dict = Depends(get_current_user)):
     """
     Determines whether the mandatory survey should show for this login/logout event.
     Rule: never on the user's first-ever login; from their second login onward,
-    show on every login and every logout.
+    show on every login and every logout - until they've submitted it once, ever.
     """
     if trigger not in ("login", "logout"):
         raise HTTPException(status_code=400, detail="trigger must be 'login' or 'logout'.")
 
     rows = run_query("SELECT login_count FROM gmaps_users WHERE id = %s;", (user["id"],))
     login_count = rows[0]["login_count"] if rows else 0
+
+    already_submitted = run_query("SELECT 1 FROM user_surveys WHERE user_id = %s LIMIT 1;", (user["id"],))
+    if already_submitted:
+        return {"should_show": False, "session_number": login_count}
 
     should_show = login_count >= 2
     return {"should_show": should_show, "session_number": login_count}
