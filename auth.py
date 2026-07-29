@@ -140,7 +140,7 @@ class GoogleAuthRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/signup")
-def signup(body: SignupRequest, response: Response):
+def signup(body: SignupRequest, request: Request, response: Response):
     email = body.email.strip().lower()
     existing = run_query("SELECT id FROM gmaps_users WHERE username = %s;", (email,))
     if existing:
@@ -161,6 +161,8 @@ def signup(body: SignupRequest, response: Response):
         "VALUES (%s,%s,%s,'admin',%s) RETURNING id, username, full_name, role, tenant_id;",
         (email, pw_hash, full_name, tenant_id),
     )
+
+    _capture_login_location(user["id"], request)
 
     token = create_access_token(user)
     set_session_cookie(response, token)
@@ -272,7 +274,7 @@ def change_password(body: ChangePasswordRequest, user: dict = Depends(get_curren
 
 
 @router.post("/google")
-def google_auth(body: GoogleAuthRequest, response: Response):
+def google_auth(body: GoogleAuthRequest, request: Request, response: Response):
     # Verify the token server-side against Google directly - never trust the
     # client-side token claims alone. Same approach already proven in n8n.
     resp = requests.get(
@@ -302,6 +304,7 @@ def google_auth(body: GoogleAuthRequest, response: Response):
             raise HTTPException(status_code=403, detail="This account has been deactivated.")
         if row["subscription_status"] not in ("active", "trialing"):
             raise HTTPException(status_code=403, detail="Your subscription is not active.")
+        _capture_login_location(row["id"], request)
         token = create_access_token(row)
         set_session_cookie(response, token)
         return {"access_token": token, "token_type": "bearer", "full_name": row["full_name"]}
@@ -323,6 +326,7 @@ def google_auth(body: GoogleAuthRequest, response: Response):
         "VALUES (%s,%s,%s,'admin',%s) RETURNING id, username, full_name, role, tenant_id;",
         (email, bcrypt.hashpw(secrets.token_hex(16).encode(), bcrypt.gensalt()).decode(), full_name, tenant["id"]),
     )
+    _capture_login_location(user["id"], request)
     token = create_access_token(user)
     set_session_cookie(response, token)
     return {"access_token": token, "token_type": "bearer", "full_name": full_name}
