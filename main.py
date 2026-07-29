@@ -17,6 +17,7 @@ import app_mockup_demo
 import portal_auth
 import portal
 import public_booking
+import agent_ops
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -24,6 +25,7 @@ ALLOWED_ORIGINS = [
     "https://automationgini.com",
     "https://www.automationgini.com",
     "https://crm.automationgini.com",
+    "https://automationgini-agent-ops.onrender.com",
     "http://localhost:5173",
     "http://localhost:5174",
 ]
@@ -72,6 +74,7 @@ app.include_router(app_mockup_demo.router)
 app.include_router(portal_auth.router)
 app.include_router(portal.router)
 app.include_router(public_booking.router)
+app.include_router(agent_ops.router)
 
 
 @app.get("/health")
