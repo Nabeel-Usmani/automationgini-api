@@ -8,19 +8,28 @@ from db import run_query, run_command, run_insert_returning
 
 router = APIRouter(prefix="/agent-ops", tags=["agent-ops"])
 
-AGENT_OPS_SECRET = os.environ.get("AGENT_OPS_SECRET", "")
+# Two separate secrets, not one: the dashboard is a static site, so whatever
+# secret it uses is visible in its shipped JS bundle to anyone who looks.
+# The read secret is safe to expose that way (it only reveals operational
+# metadata). The write secret is never given to the dashboard - only the
+# autonomous agent session holds it, server-side, so a leaked read secret
+# can't be used to forge runs or corrupt the backlog.
+AGENT_OPS_READ_SECRET = os.environ.get("AGENT_OPS_READ_SECRET", "")
+AGENT_OPS_WRITE_SECRET = os.environ.get("AGENT_OPS_WRITE_SECRET", "")
 
 
-def require_secret(x_agent_ops_secret: str = Header(None)):
-    """Shared-secret auth for the autonomous agent sessions and the
-    standalone dashboard app - neither has a human login, so this is a
-    machine-to-machine header check rather than the cookie/JWT auth used
-    elsewhere in this API."""
-    if not AGENT_OPS_SECRET or x_agent_ops_secret != AGENT_OPS_SECRET:
+def require_read_secret(x_agent_ops_secret: str = Header(None)):
+    valid = {s for s in (AGENT_OPS_READ_SECRET, AGENT_OPS_WRITE_SECRET) if s}
+    if not valid or x_agent_ops_secret not in valid:
         raise HTTPException(status_code=401, detail="Invalid or missing agent-ops secret.")
 
 
-@router.get("/runs", dependencies=[Depends(require_secret)])
+def require_write_secret(x_agent_ops_secret: str = Header(None)):
+    if not AGENT_OPS_WRITE_SECRET or x_agent_ops_secret != AGENT_OPS_WRITE_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid or missing agent-ops write secret.")
+
+
+@router.get("/runs", dependencies=[Depends(require_read_secret)])
 def list_runs(limit: int = 50):
     return run_query(
         "SELECT id, category, skill_used, target, task_description, status, summary, "
@@ -30,7 +39,7 @@ def list_runs(limit: int = 50):
     )
 
 
-@router.get("/stats", dependencies=[Depends(require_secret)])
+@router.get("/stats", dependencies=[Depends(require_read_secret)])
 def stats():
     today = run_query(
         "SELECT status, COUNT(*) AS n FROM agent_runs "
@@ -55,7 +64,7 @@ def stats():
     }
 
 
-@router.get("/backlog", dependencies=[Depends(require_secret)])
+@router.get("/backlog", dependencies=[Depends(require_read_secret)])
 def list_backlog():
     return run_query(
         "SELECT id, title, description, status, priority, blocked_reason, "
@@ -75,7 +84,7 @@ class CreateRunRequest(BaseModel):
     error_detail: Optional[str] = None
 
 
-@router.post("/runs", dependencies=[Depends(require_secret)])
+@router.post("/runs", dependencies=[Depends(require_write_secret)])
 def create_run(body: CreateRunRequest):
     row = run_insert_returning(
         "INSERT INTO agent_runs "
@@ -100,7 +109,7 @@ class UpdateBacklogRequest(BaseModel):
     blocked_reason: Optional[str] = None
 
 
-@router.patch("/backlog/{backlog_id}", dependencies=[Depends(require_secret)])
+@router.patch("/backlog/{backlog_id}", dependencies=[Depends(require_write_secret)])
 def update_backlog(backlog_id: int, body: UpdateBacklogRequest):
     run_command(
         "UPDATE agent_backlog SET status = %s, blocked_reason = %s, updated_at = NOW() WHERE id = %s;",
@@ -115,7 +124,7 @@ class CreateBacklogRequest(BaseModel):
     priority: int = 3
 
 
-@router.post("/backlog", dependencies=[Depends(require_secret)])
+@router.post("/backlog", dependencies=[Depends(require_write_secret)])
 def create_backlog_item(body: CreateBacklogRequest):
     row = run_insert_returning(
         "INSERT INTO agent_backlog (title, description, priority) VALUES (%s,%s,%s) RETURNING id;",
