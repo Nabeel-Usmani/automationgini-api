@@ -42,6 +42,12 @@ def run_query(sql: str, params: tuple = ()):
             rows = cur.fetchall()
         conn.commit()
         return [dict(r) for r in rows]
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
 
 
 def run_command(sql: str, params: tuple = ()) -> None:
