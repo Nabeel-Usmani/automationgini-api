@@ -1,12 +1,13 @@
 import os
 import json
+import uuid
 import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 
 from auth import get_current_user
-from db import run_query
+from db import run_query, run_command
 from billing import PLAN_DEFINITIONS
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -94,7 +95,14 @@ def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
 
     started = []
     errors = []
+    jobs = []
     for city in body.cities:
+        search_id = str(uuid.uuid4())
+        run_command(
+            "INSERT INTO gmaps_search_jobs (id, tenant_id, agent_id, niche, city, target_leads) "
+            "VALUES (%s, %s, %s, %s, %s, %s);",
+            (search_id, user["tenant_id"], user["id"], body.niche, city, body.max_leads),
+        )
         try:
             resp = requests.post(
                 SEARCH_WEBHOOK_URL,
@@ -107,19 +115,36 @@ def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
                     "min_reviews": body.min_reviews,
                     "max_reviews": body.max_reviews,
                     "max_rating": body.max_rating,
+                    "search_id": search_id,
                 },
                 timeout=20,
             )
             if resp.status_code >= 400:
                 errors.append(city)
+                run_command("UPDATE gmaps_search_jobs SET status = 'failed', finished_at = NOW() WHERE id = %s;", (search_id,))
             else:
                 started.append(city)
+                jobs.append({"city": city, "search_id": search_id})
         except Exception:
             errors.append(city)
+            run_command("UPDATE gmaps_search_jobs SET status = 'failed', finished_at = NOW() WHERE id = %s;", (search_id,))
 
     return {
         "success": len(started) > 0,
         "message": f"Search started for {', '.join(started)}." + (f" Failed to start: {', '.join(errors)}." if errors else ""),
         "started": started,
         "failed": errors,
+        "jobs": jobs,
     }
+
+
+@router.get("/status")
+def search_status(ids: str, user: dict = Depends(get_current_user)):
+    id_list = [i.strip() for i in ids.split(",") if i.strip()]
+    if not id_list:
+        return []
+    return run_query(
+        "SELECT id AS search_id, niche, city, target_leads, leads_found, status, started_at, finished_at "
+        "FROM gmaps_search_jobs WHERE id = ANY(%s) AND tenant_id = %s;",
+        (id_list, user["tenant_id"]),
+    )
