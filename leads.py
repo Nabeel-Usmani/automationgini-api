@@ -46,6 +46,7 @@ def list_leads(
     rows = run_query(
         f"SELECT l.id, l.business_name, l.niche, l.phone_number, l.email, l.city, l.country, l.country_code, "
         f"l.review_count, l.total_score, l.website, l.website_status, l.call_status, l.source, l.scraped_at, "
+        f"l.social_links, l.qualification_tier, l.qualification_notes, "
         f"(l.review_count BETWEEN 1 AND 15 AND l.total_score < 4) AS is_high_potential "
         f"FROM gmaps_leads l WHERE {scope_sql}{extra} ORDER BY l.scraped_at DESC LIMIT 500;",
         tuple(params),
@@ -122,7 +123,8 @@ def list_archived_leads(user: dict = Depends(get_current_user)):
     scope_sql, params = _scope_clause(user, "l")
     rows = run_query(
         f"SELECT l.id, l.business_name, l.niche, l.phone_number, l.email, l.city, l.country, l.country_code, "
-        f"l.review_count, l.total_score, l.website, l.website_status, l.call_status, l.source, l.scraped_at "
+        f"l.review_count, l.total_score, l.website, l.website_status, l.call_status, l.source, l.scraped_at, "
+        f"l.social_links, l.qualification_tier, l.qualification_notes "
         f"FROM gmaps_leads l WHERE {scope_sql} AND l.is_archived = true ORDER BY l.scraped_at DESC LIMIT 500;",
         tuple(params),
     )
