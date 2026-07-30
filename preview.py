@@ -75,10 +75,19 @@ def serve_preview(preview: str = Query(...), page: str = Query("index")):
 
     if not html:
         if row["fulfillment_status"] == "building":
+            pages_done = len(pages)
+            pages_total = 4
+            pct = round((pages_done / pages_total) * 100) if pages_total else 0
             return HTMLResponse(
                 "<html><head><meta http-equiv='refresh' content='5'></head>"
                 "<body style='font-family:sans-serif;text-align:center;padding:80px;'>"
-                "<h2>Still building this page...</h2><p>This refreshes automatically.</p>"
+                "<h2>Still building this page...</h2>"
+                "<div style='max-width:280px;margin:20px auto 4px;height:6px;background:#dbeafe;"
+                "border-radius:999px;overflow:hidden;'>"
+                f"<div style='height:100%;width:{pct}%;background:#2563eb;border-radius:999px;'></div>"
+                "</div>"
+                f"<p style='font-family:monospace;color:#64748b;font-size:13px;'>{pages_done} / {pages_total} pages generated ({pct}%)</p>"
+                "<p>This refreshes automatically.</p>"
                 "</body></html>"
             )
         return HTMLResponse("<h1>This page isn't available yet.</h1>", status_code=404)
