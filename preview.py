@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query
@@ -51,6 +52,11 @@ def preview_revision(id: int = Query(...)):
 
 @router.get("/preview", response_class=HTMLResponse)
 def serve_preview(preview: str = Query(...), page: str = Query("index")):
+    try:
+        uuid.UUID(preview)
+    except ValueError:
+        return HTMLResponse("<h1>This preview link isn't valid.</h1>", status_code=404)
+
     rows = run_query(
         "SELECT fulfillment_detail, fulfillment_status, preview_expires_at "
         "FROM purchases WHERE preview_token = %s;",
