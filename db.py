@@ -1,96 +1,63 @@
 import os
 import psycopg2
 import psycopg2.extras
+from psycopg2.pool import ThreadedConnectionPool
 
-_conn = None
-
-
-def get_connection():
-    """Returns a live connection, reconnecting if the cached one has died.
-    Mirrors the exact reconnect pattern already proven in the Streamlit CRM."""
-    global _conn
-    if _conn is None or _conn.closed:
-        _conn = _fresh_connection()
-    return _conn
+_pool = None
 
 
-def _fresh_connection():
-    global _conn
-    database_url = os.environ["DATABASE_URL"]
-    _conn = psycopg2.connect(database_url)
-    _conn.autocommit = False
-    return _conn
+def _get_pool():
+    """FastAPI runs these sync route functions in a thread pool, so a single
+    shared connection (the previous design, mirrored from the Streamlit CRM
+    where each session is single-threaded) is unsafe here: two concurrent
+    requests can call execute()/commit() on the same libpq connection at once
+    and corrupt its protocol state, wedging it for every request afterward.
+    A connection pool gives each request its own connection instead."""
+    global _pool
+    if _pool is None:
+        _pool = ThreadedConnectionPool(1, 10, os.environ["DATABASE_URL"])
+    return _pool
 
 
-def run_query(sql: str, params: tuple = ()):
-    """Read-only query, returns a list of dicts. Explicitly ends the transaction
-    after reading - leaving it open (the previous behavior) causes connections to
-    sit 'idle in transaction' indefinitely, holding locks that can block other
-    operations (this was a real, confirmed bug: a stale read left open for 51
-    minutes blocked a schema migration)."""
-    conn = get_connection()
+def _run(sql: str, params: tuple, cursor_factory, fetch):
+    pool = _get_pool()
+    conn = pool.getconn()
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        with conn.cursor(cursor_factory=cursor_factory) as cur:
             cur.execute(sql, params)
-            rows = cur.fetchall()
+            result = fetch(cur) if fetch else None
         conn.commit()
-        return [dict(r) for r in rows]
+        pool.putconn(conn)
+        return result
     except (psycopg2.InterfaceError, psycopg2.OperationalError):
-        conn = _fresh_connection()
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        pool.putconn(conn, close=True)
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=cursor_factory) as cur:
             cur.execute(sql, params)
-            rows = cur.fetchall()
+            result = fetch(cur) if fetch else None
         conn.commit()
-        return [dict(r) for r in rows]
+        pool.putconn(conn)
+        return result
     except Exception:
         try:
             conn.rollback()
-        except Exception:
-            pass
+        finally:
+            pool.putconn(conn)
         raise
+
+
+def run_query(sql: str, params: tuple = ()):
+    """Read-only query, returns a list of dicts."""
+    rows = _run(sql, params, psycopg2.extras.RealDictCursor, lambda cur: cur.fetchall())
+    return [dict(r) for r in rows]
 
 
 def run_command(sql: str, params: tuple = ()) -> None:
     """Write query with no return value needed. Commits."""
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-        conn.commit()
-    except (psycopg2.InterfaceError, psycopg2.OperationalError):
-        conn = _fresh_connection()
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-        conn.commit()
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise
+    _run(sql, params, None, None)
 
 
 def run_insert_returning(sql: str, params: tuple = ()):
-    """INSERT/UPDATE ... RETURNING, commits, returns a single dict or None.
-    Exact same helper that fixed a real bug in the Streamlit CRM - run_query
-    alone never commits, so it's unsafe for writes."""
-    conn = get_connection()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, params)
-            row = cur.fetchone()
-        conn.commit()
-        return dict(row) if row else None
-    except (psycopg2.InterfaceError, psycopg2.OperationalError):
-        conn = _fresh_connection()
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, params)
-            row = cur.fetchone()
-        conn.commit()
-        return dict(row) if row else None
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise
+    """INSERT/UPDATE ... RETURNING, commits, returns a single dict or None."""
+    row = _run(sql, params, psycopg2.extras.RealDictCursor, lambda cur: cur.fetchone())
+    return dict(row) if row else None
