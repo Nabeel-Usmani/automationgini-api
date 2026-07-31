@@ -65,15 +65,27 @@ class SearchRequest(BaseModel):
     country: str
     cities: List[str]
     max_leads: int = 20
+    search_mode: str = "google_maps"  # "google_maps" | "other_platforms"
+    # Google Maps mode filters
     min_reviews: int = 1
     max_reviews: int = 15
     max_rating: float = 4.0
+    # Other Platforms mode filters (Perplexity-driven)
+    platforms: List[str] = []
+    business_type: str = "both"  # "b2b" | "b2c" | "both"
+    presence_gap: str = "no_website"  # "no_website" | "weak_presence" | "no_social" | "any"
+    business_size: str = "any"  # "solo" | "small_team" | "any"
+    min_contactability: bool = True
+    reputation_signal: bool = False
+    geo_scope: str = "city"  # "city" | "metro"
 
 
 @router.post("/run")
 def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
     if not body.cities:
         raise HTTPException(status_code=400, detail="Select at least one city.")
+    if body.search_mode not in ("google_maps", "other_platforms"):
+        raise HTTPException(status_code=400, detail="Invalid search_mode.")
 
     # Real cap enforcement - this was previously missing entirely, meaning
     # searches ran with no limit regardless of plan (confirmed: a Free-plan
@@ -99,9 +111,9 @@ def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
     for city in body.cities:
         search_id = str(uuid.uuid4())
         run_command(
-            "INSERT INTO gmaps_search_jobs (id, tenant_id, agent_id, niche, city, target_leads) "
-            "VALUES (%s, %s, %s, %s, %s, %s);",
-            (search_id, user["tenant_id"], user["id"], body.niche, city, body.max_leads),
+            "INSERT INTO gmaps_search_jobs (id, tenant_id, agent_id, niche, city, target_leads, search_channel) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s);",
+            (search_id, user["tenant_id"], user["id"], body.niche, city, body.max_leads, body.search_mode),
         )
         try:
             resp = requests.post(
@@ -112,9 +124,17 @@ def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
                     "country": body.country,
                     "agent_id": user["id"],
                     "max_leads": body.max_leads,
+                    "search_mode": body.search_mode,
                     "min_reviews": body.min_reviews,
                     "max_reviews": body.max_reviews,
                     "max_rating": body.max_rating,
+                    "platforms": body.platforms,
+                    "business_type": body.business_type,
+                    "presence_gap": body.presence_gap,
+                    "business_size": body.business_size,
+                    "min_contactability": body.min_contactability,
+                    "reputation_signal": body.reputation_signal,
+                    "geo_scope": body.geo_scope,
                     "search_id": search_id,
                 },
                 timeout=20,
@@ -144,7 +164,7 @@ def search_status(ids: str, user: dict = Depends(get_current_user)):
     if not id_list:
         return []
     return run_query(
-        "SELECT id AS search_id, niche, city, target_leads, leads_found, status, started_at, finished_at "
+        "SELECT id AS search_id, niche, city, target_leads, leads_found, status, started_at, finished_at, search_channel "
         "FROM gmaps_search_jobs WHERE id = ANY(%s) AND tenant_id = %s;",
         (id_list, user["tenant_id"]),
     )
