@@ -73,7 +73,7 @@ class SearchRequest(BaseModel):
     # Other Platforms mode filters (Perplexity-driven)
     platforms: List[str] = []
     business_type: str = "both"  # "b2b" | "b2c" | "both"
-    presence_gap: str = "no_website"  # "no_website" | "weak_presence" | "no_social" | "any"
+    presence_gap: str = "weak_presence"  # "no_website" | "weak_presence" | "no_social" | "any"
     business_size: str = "any"  # "solo" | "small_team" | "any"
     min_contactability: bool = True
     reputation_signal: bool = False
