@@ -61,11 +61,15 @@ STATUS_OPTIONS = ["New", "Called", "Interested", "Not Interested", "Follow-up"]
 
 
 @router.get("/filter-options")
-def leads_filter_options(user: dict = Depends(get_current_user)):
+def leads_filter_options(channel: Optional[str] = None, user: dict = Depends(get_current_user)):
     scope_sql, params = _scope_clause(user, "l")
-    niches = run_query(f"SELECT DISTINCT niche FROM gmaps_leads l WHERE {scope_sql} ORDER BY niche;", tuple(params))
-    countries = run_query(f"SELECT DISTINCT country FROM gmaps_leads l WHERE {scope_sql} ORDER BY country;", tuple(params))
-    cities = run_query(f"SELECT DISTINCT city FROM gmaps_leads l WHERE {scope_sql} ORDER BY city;", tuple(params))
+    extra = ""
+    if channel:
+        extra = " AND l.search_channel = %s"
+        params.append(channel)
+    niches = run_query(f"SELECT DISTINCT niche FROM gmaps_leads l WHERE {scope_sql}{extra} ORDER BY niche;", tuple(params))
+    countries = run_query(f"SELECT DISTINCT country FROM gmaps_leads l WHERE {scope_sql}{extra} ORDER BY country;", tuple(params))
+    cities = run_query(f"SELECT DISTINCT city FROM gmaps_leads l WHERE {scope_sql}{extra} ORDER BY city;", tuple(params))
     return {
         "niches": [r["niche"] for r in niches],
         "countries": [r["country"] for r in countries],
