@@ -67,9 +67,9 @@ def leads_filter_options(channel: Optional[str] = None, user: dict = Depends(get
     if channel:
         extra = " AND l.search_channel = %s"
         params.append(channel)
-    niches = run_query(f"SELECT DISTINCT niche FROM gmaps_leads l WHERE {scope_sql}{extra} ORDER BY niche;", tuple(params))
-    countries = run_query(f"SELECT DISTINCT country FROM gmaps_leads l WHERE {scope_sql}{extra} ORDER BY country;", tuple(params))
-    cities = run_query(f"SELECT DISTINCT city FROM gmaps_leads l WHERE {scope_sql}{extra} ORDER BY city;", tuple(params))
+    niches = run_query(f"SELECT DISTINCT niche FROM gmaps_leads l WHERE {scope_sql}{extra} AND l.niche IS NOT NULL ORDER BY niche;", tuple(params))
+    countries = run_query(f"SELECT DISTINCT country FROM gmaps_leads l WHERE {scope_sql}{extra} AND l.country IS NOT NULL ORDER BY country;", tuple(params))
+    cities = run_query(f"SELECT DISTINCT city FROM gmaps_leads l WHERE {scope_sql}{extra} AND l.city IS NOT NULL ORDER BY city;", tuple(params))
     return {
         "niches": [r["niche"] for r in niches],
         "countries": [r["country"] for r in countries],
