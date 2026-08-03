@@ -65,7 +65,7 @@ def sends(email_type: str = "all", user: dict = Depends(get_current_user)):
     if email_type == "initial":
         type_sql = " AND e.email_type = 'initial'"
     elif email_type == "followups":
-        type_sql = " AND e.email_type LIKE 'followup_%'"
+        type_sql = " AND e.email_type LIKE 'followup_%%'"
     return run_query(
         f"SELECT e.id, e.sequence_id, e.step, e.email_type, e.sent_at, e.message_id, e.subject, "
         f"l.business_name, l.niche, l.city, l.country, l.email AS to_email, "
@@ -104,7 +104,7 @@ def timeseries(user: dict = Depends(get_current_user)):
     return run_query(
         f"SELECT e.sent_at::date AS day, "
         f"COUNT(*) FILTER (WHERE e.email_type = 'initial') AS initial_sent, "
-        f"COUNT(*) FILTER (WHERE e.email_type LIKE 'followup_%') AS followups_sent "
+        f"COUNT(*) FILTER (WHERE e.email_type LIKE 'followup_%%') AS followups_sent "
         f"FROM lead_email_sends e "
         f"JOIN lead_email_sequences s ON s.id = e.sequence_id "
         f"WHERE {scope_sql} AND e.sent_at >= NOW() - INTERVAL '30 days' "
