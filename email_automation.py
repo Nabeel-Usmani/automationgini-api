@@ -52,3 +52,62 @@ def sequences(user: dict = Depends(get_current_user)):
         f"WHERE {scope_sql} ORDER BY s.created_at DESC LIMIT 500;",
         tuple(params),
     )
+
+
+@router.get("/sends")
+def sends(email_type: str = "all", user: dict = Depends(get_current_user)):
+    """Individual emails actually sent, for the drill-down when an agent
+    clicks a metric card (e.g. Initial Sent, Follow-ups Sent). Excludes the
+    html body to keep the list light - fetch /sends/{id} for that."""
+    _require_enabled(user)
+    scope_sql, params = _scope_clause(user, "s")
+    type_sql = ""
+    if email_type == "initial":
+        type_sql = " AND e.email_type = 'initial'"
+    elif email_type == "followups":
+        type_sql = " AND e.email_type LIKE 'followup_%'"
+    return run_query(
+        f"SELECT e.id, e.sequence_id, e.step, e.email_type, e.sent_at, e.message_id, e.subject, "
+        f"l.business_name, l.niche, l.city, l.country, l.email AS to_email, "
+        f"s.sequence_type, s.status, s.replied_at "
+        f"FROM lead_email_sends e "
+        f"JOIN lead_email_sequences s ON s.id = e.sequence_id "
+        f"JOIN gmaps_leads l ON l.id = s.lead_id "
+        f"WHERE {scope_sql}{type_sql} ORDER BY e.sent_at DESC LIMIT 500;",
+        tuple(params),
+    )
+
+
+@router.get("/sends/{send_id}")
+def send_detail(send_id: int, user: dict = Depends(get_current_user)):
+    """Full content (subject + html) of one sent email, for the preview modal."""
+    _require_enabled(user)
+    scope_sql, params = _scope_clause(user, "s")
+    rows = run_query(
+        f"SELECT e.id, e.subject, e.html, e.sent_at, e.message_id, l.business_name, l.email AS to_email "
+        f"FROM lead_email_sends e "
+        f"JOIN lead_email_sequences s ON s.id = e.sequence_id "
+        f"JOIN gmaps_leads l ON l.id = s.lead_id "
+        f"WHERE e.id = %s AND {scope_sql};",
+        tuple([send_id] + params),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Email not found.")
+    return rows[0]
+
+
+@router.get("/timeseries")
+def timeseries(user: dict = Depends(get_current_user)):
+    """Daily send counts (initial vs follow-up) for the last 30 days, for the chart."""
+    _require_enabled(user)
+    scope_sql, params = _scope_clause(user, "s")
+    return run_query(
+        f"SELECT e.sent_at::date AS day, "
+        f"COUNT(*) FILTER (WHERE e.email_type = 'initial') AS initial_sent, "
+        f"COUNT(*) FILTER (WHERE e.email_type LIKE 'followup_%') AS followups_sent "
+        f"FROM lead_email_sends e "
+        f"JOIN lead_email_sequences s ON s.id = e.sequence_id "
+        f"WHERE {scope_sql} AND e.sent_at >= NOW() - INTERVAL '30 days' "
+        f"GROUP BY e.sent_at::date ORDER BY e.sent_at::date;",
+        tuple(params),
+    )

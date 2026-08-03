@@ -1,0 +1,3 @@
+ALTER TABLE lead_email_sends
+  ADD COLUMN IF NOT EXISTS subject TEXT,
+  ADD COLUMN IF NOT EXISTS html TEXT;
