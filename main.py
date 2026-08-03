@@ -22,6 +22,7 @@ import survey
 import calendly
 import email_automation
 import inbound_reply
+import screenshot_proxy
 
 ALLOWED_ORIGINS = [
     "https://automationgini-website.onrender.com",
@@ -83,6 +84,7 @@ app.include_router(survey.router)
 app.include_router(calendly.router)
 app.include_router(email_automation.router)
 app.include_router(inbound_reply.router)
+app.include_router(screenshot_proxy.router)
 
 
 @app.get("/health")
