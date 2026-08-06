@@ -96,6 +96,24 @@ def send_detail(send_id: int, user: dict = Depends(get_current_user)):
     return rows[0]
 
 
+@router.get("/replies")
+def replies(user: dict = Depends(get_current_user)):
+    """Inbound replies matched to a lead's sequence (captured by the IMAP reply
+    poller), for the Replied drill-down - shows reply content directly instead
+    of requiring the agent to check their own inbox."""
+    _require_enabled(user)
+    scope_sql, params = _scope_clause(user, "s")
+    return run_query(
+        f"SELECT r.id, r.sequence_id, r.from_email, r.subject, r.body, r.received_at, "
+        f"l.business_name, l.niche, l.city, l.country "
+        f"FROM lead_email_replies r "
+        f"JOIN lead_email_sequences s ON s.id = r.sequence_id "
+        f"JOIN gmaps_leads l ON l.id = s.lead_id "
+        f"WHERE {scope_sql} ORDER BY r.received_at DESC LIMIT 200;",
+        tuple(params),
+    )
+
+
 @router.get("/timeseries")
 def timeseries(user: dict = Depends(get_current_user)):
     """Daily send counts (initial vs follow-up) for the last 30 days, for the chart."""
