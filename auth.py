@@ -90,7 +90,7 @@ def get_current_user(
     rows = run_query(
         "SELECT u.id, u.username, u.full_name, u.role, u.is_active, u.tenant_id, "
         "u.is_platform_owner, t.company_name, t.plan_name, t.subscription_status, "
-        "t.email_automation_enabled "
+        "t.email_automation_enabled, t.premium_leads_enabled "
         "FROM gmaps_users u JOIN tenants t ON t.id = u.tenant_id WHERE u.id = %s;",
         (payload["sub"],),
     )
@@ -249,6 +249,7 @@ def me(user: dict = Depends(get_current_user)):
         "plan_name": user["plan_name"],
         "is_platform_owner": bool(user["is_platform_owner"]),
         "email_automation_enabled": bool(user["email_automation_enabled"]),
+        "premium_leads_enabled": bool(user["premium_leads_enabled"]),
     }
 
 

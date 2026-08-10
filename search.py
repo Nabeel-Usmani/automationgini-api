@@ -78,6 +78,7 @@ class SearchRequest(BaseModel):
     min_contactability: bool = True
     reputation_signal: bool = False
     geo_scope: str = "city"  # "city" | "metro"
+    want_premium_leads: bool = False
 
 
 @router.post("/run")
@@ -105,15 +106,19 @@ def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
                 detail=f"You've reached your plan's {lead_cap}-lead monthly limit ({used} used). Upgrade your plan to continue searching.",
             )
 
+    # Server-side gate - a tenant without the flag can't turn this on just by
+    # sending the field, since the frontend checkbox is only a UI convenience.
+    want_premium_leads = body.want_premium_leads and bool(user.get("premium_leads_enabled"))
+
     started = []
     errors = []
     jobs = []
     for city in body.cities:
         search_id = str(uuid.uuid4())
         run_command(
-            "INSERT INTO gmaps_search_jobs (id, tenant_id, agent_id, niche, city, target_leads, search_channel) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s);",
-            (search_id, user["tenant_id"], user["id"], body.niche, city, body.max_leads, body.search_mode),
+            "INSERT INTO gmaps_search_jobs (id, tenant_id, agent_id, niche, city, target_leads, search_channel, want_premium_leads) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s);",
+            (search_id, user["tenant_id"], user["id"], body.niche, city, body.max_leads, body.search_mode, want_premium_leads),
         )
         try:
             resp = requests.post(
@@ -136,6 +141,7 @@ def run_search(body: SearchRequest, user: dict = Depends(get_current_user)):
                     "reputation_signal": body.reputation_signal,
                     "geo_scope": body.geo_scope,
                     "search_id": search_id,
+                    "want_premium_leads": want_premium_leads,
                 },
                 timeout=20,
             )

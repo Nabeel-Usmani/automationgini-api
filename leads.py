@@ -57,6 +57,21 @@ def list_leads(
     return rows
 
 
+@router.get("/premium")
+def list_premium_leads(user: dict = Depends(get_current_user)):
+    if not user.get("premium_leads_enabled"):
+        raise HTTPException(status_code=403, detail="Premium Leads isn't enabled for your account yet.")
+    scope_sql, params = _scope_clause(user, "l")
+    rows = run_query(
+        f"SELECT l.id, l.business_name, l.niche, l.city, l.country, l.website, "
+        f"o.owner_name, o.guessed_email, o.pattern_type, o.confidence, o.status AS email_status, o.updated_at "
+        f"FROM lead_owner_emails o JOIN gmaps_leads l ON l.id = o.lead_id "
+        f"WHERE {scope_sql} ORDER BY o.updated_at DESC;",
+        tuple(params),
+    )
+    return rows
+
+
 STATUS_OPTIONS = ["New", "Called", "Interested", "Not Interested", "Follow-up"]
 
 
