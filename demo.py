@@ -127,14 +127,14 @@ def website_previews_created(user: dict = Depends(get_current_user)):
     scope_sql, params = _scope_clause(user, "p")
     rows = run_query(
         f"SELECT p.id, p.lead_id, l.business_name, l.niche, l.city, p.preview_token, p.preview_expires_at, "
-        f"p.payment_status, p.fulfillment_status, p.created_at, "
+        f"p.payment_status, p.fulfillment_status, p.created_at, p.product_type, "
         f"(SELECT count(*) FROM jsonb_object_keys(p.fulfillment_detail->'pages')) AS pages_done "
         f"FROM purchases p JOIN gmaps_leads l ON l.id = p.lead_id "
         f"WHERE p.product_type IN ('website_html','website_react','website_react_video','website_html_nemotron') AND {scope_sql} ORDER BY p.created_at DESC;",
         tuple(params),
     )
     for r in rows:
-        r["pages_total"] = 4
+        r["pages_total"] = 1 if r["product_type"] == "website_html_nemotron" else 4
     return rows
 
 
@@ -180,7 +180,7 @@ def business_crm_demos_created(user: dict = Depends(get_current_user)):
 def website_preview_status(purchase_id: int, user: dict = Depends(get_current_user)):
     scope_sql, params = _scope_clause(user, "p")
     rows = run_query(
-        f"SELECT p.id, p.fulfillment_status, p.preview_token, "
+        f"SELECT p.id, p.fulfillment_status, p.preview_token, p.product_type, "
         f"jsonb_object_keys(p.fulfillment_detail->'pages') AS page_key "
         f"FROM purchases p WHERE p.id = %s AND {scope_sql};",
         tuple([purchase_id] + params),
@@ -188,4 +188,5 @@ def website_preview_status(purchase_id: int, user: dict = Depends(get_current_us
     pages_done = [r["page_key"] for r in rows]
     status = rows[0]["fulfillment_status"] if rows else None
     token = rows[0]["preview_token"] if rows else None
-    return {"fulfillment_status": status, "preview_token": token, "pages_done": pages_done, "pages_total": 4}
+    pages_total = 1 if (rows and rows[0]["product_type"] == "website_html_nemotron") else 4
+    return {"fulfillment_status": status, "preview_token": token, "pages_done": pages_done, "pages_total": pages_total}
