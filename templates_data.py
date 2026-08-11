@@ -1,76 +1,14 @@
 """
-20 website templates: 10 Normal Architecture (traditional/trustworthy, real stylistic range)
-+ 10 Modern Architecture (bold/contemporary, real stylistic range).
+10 layouts - bold/contemporary, real stylistic range spanning dark and
+light aesthetics (Neon Tech / Dark Cinematic dark-first, Editorial Luxury /
+Minimalist Gallery light-first, etc).
 
-Each template has a short id, display name/description (for the gallery), and a
-detailed design_brief - fed directly into the page-generation prompt in place of
-the old single generic "normalDesign"/"modernDesign" block.
+Each layout has a short id, display name/description (for the gallery), and
+a detailed design_brief - fed directly into the page-generation prompt in
+place of the generic "modernDesign" block.
 """
 
-NORMAL_TEMPLATES = [
-    {
-        "id": "classic-corporate",
-        "name": "Classic Corporate",
-        "description": "Formal, symmetrical, serif headings — the look of an established firm.",
-        "design_brief": "Navy and charcoal-gray palette with a single muted gold or steel-blue accent. Centered, symmetrical layouts with generous, formal whitespace. Serif headings (Georgia/Times-style) paired with a clean sans-serif body. Two-tier header: slim utility bar above a solid nav bar, both sticky. Services and testimonials in perfectly uniform bordered card grids. Straight rectangular section edges throughout - no diagonals or curves. Feels like a firm that's been trusted for 30+ years."
-    },
-    {
-        "id": "warm-neighborhood",
-        "name": "Warm Neighborhood",
-        "description": "Earth tones, rounded corners, approachable and friendly.",
-        "design_brief": "Warm terracotta, cream, and sage-green palette. Generously rounded corners on every card, button, and image (16-24px radius). Friendly, slightly informal sans-serif throughout (rounded letterforms preferred). Soft drop shadows, never harsh. Services presented as warm rounded cards with icon circles. Hero has a warm gradient overlay, not stark black. Feels like a friendly local business you'd wave to on the street, not a faceless company."
-    },
-    {
-        "id": "bold-trade",
-        "name": "Bold Trade",
-        "description": "High-contrast, thick borders, built for contractors and trade services.",
-        "design_brief": "One loud, saturated primary color (safety-orange, fire-engine red, or electric blue) against white and near-black. Thick (3-4px) solid borders on cards and buttons - no subtle shadows, bold outlines instead. Bold, condensed, all-caps headings that feel industrial and confident. Two-tier header with an unmissable phone-CTA button in the accent color. Square corners throughout, no rounding. Feels like a no-nonsense trade business that gets the job done."
-    },
-    {
-        "id": "coastal-clean",
-        "name": "Coastal Clean",
-        "description": "Airy blues and whites, light and spacious.",
-        "design_brief": "Soft ocean-blue, white, and warm sand-beige palette. Extremely generous whitespace and breathing room between sections - nothing feels cramped. Light, thin-weight sans-serif headings. Hero uses a full-width light photo with minimal, translucent-white text overlay (not dark). Wave-like soft curved section dividers (subtle border-radius on section tops, not sharp diagonals). Feels bright, clean, and unhurried."
-    },
-    {
-        "id": "heritage-craft",
-        "name": "Heritage Craft",
-        "design_brief": "Deep forest-green, walnut-brown, and cream palette. Subtle textured background (very light noise/paper-grain via CSS gradient, not an image) behind key sections. Classic serif headings with wide letter-spacing, evoking hand-lettered signage. Ornamental thin-line dividers between sections. Services presented with a small decorative flourish (a thin rule or small icon) above each heading. Feels artisanal, established, and proud of craftsmanship.",
-        "description": "Deep greens and browns, textured, artisanal feel."
-    },
-    {
-        "id": "medical-trust",
-        "name": "Medical Trust",
-        "description": "Clean whites and teals, clinical and reassuring.",
-        "design_brief": "Crisp white background with a calm teal or medical-blue accent, used sparingly. Extremely clean, uncluttered layouts with lots of negative space - nothing decorative or busy. Simple geometric sans-serif throughout, no flourishes. Rounded-square icon badges (not circles, not sharp squares) for trust signals. Subtle, soft shadows only. Feels clinical, calm, and immediately trustworthy - appropriate for healthcare, dental, or wellness services."
-    },
-    {
-        "id": "family-business",
-        "name": "Family Business",
-        "description": "Soft pastels, photo-heavy, personal and warm.",
-        "design_brief": "Soft pastel palette (dusty rose, muted yellow, soft blue) with cream backgrounds. Photo-heavy layout - real stock photos used generously and large, not just as accents. Handwritten-style accent font for one or two special headings (a signature/welcome message feel), paired with a simple sans-serif for the rest. Testimonials presented prominently with large quote marks and a personal, warm framing. Feels like a genuinely family-run business that knows its customers by name."
-    },
-    {
-        "id": "metro-professional",
-        "name": "Metro Professional",
-        "description": "Sleek grays and blues, sharp urban lines.",
-        "design_brief": "Cool slate-gray and steel-blue palette with crisp white space. Sharp, precise geometric layouts - thin 1px borders instead of shadows, everything feels measured and exact. Modern grotesque sans-serif (like Helvetica/Inter) throughout, no serifs anywhere. Services in a tight, precise grid with thin dividing lines between items rather than card boxes. Feels like a sharp, no-fuss professional operation in a big city."
-    },
-    {
-        "id": "rustic-reliable",
-        "name": "Rustic Reliable",
-        "description": "Warm wood tones, rugged and dependable.",
-        "design_brief": "Warm wood-brown, rust-orange, and off-white palette. Slightly rugged, sturdy-feeling typography - bold, slightly condensed headings. Subtle wood-grain-style gradient texture behind the hero section only. Buttons and CTAs styled like solid, chunky physical buttons (thicker padding, stronger shadow on hover). Section dividers are simple thick horizontal rules in the accent color. Feels dependable, hardworking, built to last."
-    },
-    {
-        "id": "fresh-local",
-        "name": "Fresh Local",
-        "description": "Bright greens and yellows, modern but approachable.",
-        "design_brief": "Bright lime-green and sunny-yellow accents against clean white. Playful but professional - rounded pill-shaped buttons and badges. Modern sans-serif headings with slightly bold weight, friendly not corporate. Service cards have a colorful top accent bar (each a slightly different shade of the palette) for visual variety. Light, energetic hover animations (slight bounce/scale) on interactive elements. Feels like a beloved local favorite that's modern and easy to work with."
-    },
-]
-
-MODERN_TEMPLATES = [
+LAYOUTS = [
     {
         "id": "brutalist-edge",
         "name": "Brutalist Edge",

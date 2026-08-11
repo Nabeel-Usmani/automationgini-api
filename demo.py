@@ -91,7 +91,7 @@ def chatbot_demos_created(user: dict = Depends(get_current_user)):
 
 class WebsitePreviewRequest(BaseModel):
     lead_id: int
-    product_type: str = "website_html"
+    product_type: str = "website_react"
     template_id: Optional[str] = None
 
 
@@ -103,8 +103,8 @@ def build_website_preview(body: WebsitePreviewRequest, user: dict = Depends(get_
 
     design_brief = None
     if body.template_id:
-        from templates_data import NORMAL_TEMPLATES, MODERN_TEMPLATES
-        for t in NORMAL_TEMPLATES + MODERN_TEMPLATES:
+        from templates_data import LAYOUTS
+        for t in LAYOUTS:
             if t["id"] == body.template_id:
                 design_brief = t["design_brief"]
                 break

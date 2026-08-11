@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 
 from auth import get_current_user
 from db import run_query
-from templates_data import NORMAL_TEMPLATES, MODERN_TEMPLATES
+from templates_data import LAYOUTS
 
 router = APIRouter(prefix="/templates", tags=["templates"])
 
@@ -14,10 +14,7 @@ def _public(t: dict) -> dict:
 
 @router.get("")
 def list_templates(user: dict = Depends(get_current_user)):
-    return {
-        "normal": [_public(t) for t in NORMAL_TEMPLATES],
-        "modern": [_public(t) for t in MODERN_TEMPLATES],
-    }
+    return {"layouts": [_public(t) for t in LAYOUTS]}
 
 
 @router.get("/preview", response_class=HTMLResponse)
