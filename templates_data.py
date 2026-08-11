@@ -40,28 +40,28 @@ LAYOUTS = [
         "description": "Bold geometric grid, energetic and dynamic."
     },
     {
-        "id": "glassmorphism-premium",
-        "name": "Glassmorphism Premium",
-        "description": "Frosted glass panels, soft gradients, premium feel.",
-        "design_brief": "Soft pastel-to-deep gradient background (e.g., indigo-to-violet) with frosted-glass 'glassmorphism' cards floating on top (semi-transparent white background, backdrop-blur, thin light border) for services/testimonials. Rounded, soft geometric shapes throughout. Modern, slightly rounded sans-serif typography. Subtle floating gradient orbs (soft blurred circles) as background decoration. Feels premium, soft, and current - a modern SaaS-product aesthetic applied to a local business."
-    },
-    {
-        "id": "retro-futurism",
-        "name": "Retro Futurism",
-        "description": "Bold gradients, rounded shapes, playful yet premium.",
-        "design_brief": "Bold sunset-style gradient (purple-to-orange or pink-to-yellow) used boldly in hero backgrounds and accent shapes. Rounded, chunky geometric shapes (large circles, soft blob shapes) as decorative background elements. Retro-inspired but clean display typography - slightly rounded, confident letterforms. Bright, saturated, high-energy color combinations. CTAs styled as bold rounded-pill buttons with gradient fills. Feels playful, optimistic, and distinctive without looking unprofessional."
-    },
-    {
         "id": "monochrome-architectural",
         "name": "Monochrome Architectural",
         "description": "Single accent color, sharp geometric sectioning.",
         "design_brief": "Strict black, white, and ONE accent color (nothing else) - disciplined and architectural. Sharp, precise geometric section divisions using clip-path (angular cuts, not curves). Structural grid lines visible as a subtle design element (thin vertical/horizontal rules dividing content areas, like architectural blueprints). Bold, wide, all-caps headline type with generous letter-spacing. Feels precise, confident, and design-forward, like a modern architecture or design firm."
     },
     {
-        "id": "vibrant-maximalist",
-        "name": "Vibrant Maximalist",
-        "description": "Bold multi-color blocks, playful and youthful.",
-        "design_brief": "Multiple bold saturated colors used confidently together (not just one accent - a full vibrant palette of 3-4 colors across different sections). Each major section has its own bold background color, creating a colorful, segmented scroll experience. Bold, rounded, friendly display typography. Playful decorative shapes (stars, squiggles, dots) as small accents. High energy throughout, embraces color rather than restraining it. Feels young, energetic, and impossible to ignore."
+        "id": "gentlemans-study",
+        "name": "Gentleman's Study",
+        "description": "Deep green and brass, private-library feel.",
+        "design_brief": "Deep forest-green and walnut-brown palette with a single brass or aged-gold accent, on a near-black or deep-green background (not white). Classic serif display headlines with wide letter-spacing, evoking hand-lettered study/library signage. Thin brass hairline rules as section dividers. Subtle leather/wood-grain texture (via CSS gradient, not an image) behind the hero only. Trust badges and icons rendered as small line-art in the brass accent, not filled shapes. Feels like a private members' study or old-money law office - composed, unhurried, quietly confident."
+    },
+    {
+        "id": "savile-row",
+        "name": "Savile Row",
+        "description": "Charcoal and pewter, bespoke-tailor precision.",
+        "design_brief": "Charcoal and deep-navy palette with a single pewter or silver accent, crisp white space used sparingly for contrast. Sharp, exact geometric layouts - thin 1px pewter rules instead of shadows, everything measured to the pixel. A subtle pinstripe motif (very thin, widely-spaced vertical lines at low opacity) behind the hero section only. Refined serif or classic grotesque headline type, no rounding anywhere on buttons or cards. Feels like a bespoke tailor's own site - exacting, understated, precise."
+    },
+    {
+        "id": "whiskey-oak",
+        "name": "Whiskey & Oak",
+        "description": "Amber and mahogany, warm low-lit lounge feel.",
+        "design_brief": "Warm amber and deep mahogany-red palette on a near-black base, like low lighting in a wood-paneled room. Bold, confident slab-serif headlines. High-contrast, slightly desaturated photography treatment (CSS filter) to match the warm low-light mood. Buttons and CTAs styled as solid, substantial physical buttons (thicker padding, warm amber glow on hover, not a bright neon glow). Section dividers are thin horizontal rules in the amber accent. Feels like a whiskey bar or cigar lounge - rich, warm, unmistakably masculine without being loud."
     },
     {
         "id": "dark-cinematic",
