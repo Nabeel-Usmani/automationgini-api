@@ -130,7 +130,7 @@ def website_previews_created(user: dict = Depends(get_current_user)):
         f"p.payment_status, p.fulfillment_status, p.created_at, "
         f"(SELECT count(*) FROM jsonb_object_keys(p.fulfillment_detail->'pages')) AS pages_done "
         f"FROM purchases p JOIN gmaps_leads l ON l.id = p.lead_id "
-        f"WHERE p.product_type IN ('website_html','website_react','website_react_video') AND {scope_sql} ORDER BY p.created_at DESC;",
+        f"WHERE p.product_type IN ('website_html','website_react','website_react_video','website_html_nemotron') AND {scope_sql} ORDER BY p.created_at DESC;",
         tuple(params),
     )
     for r in rows:
