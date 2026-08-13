@@ -9,6 +9,7 @@ import demo
 import build
 import search
 import billing
+import credits
 import preview
 import templates_routes
 import admin
@@ -71,6 +72,7 @@ app.include_router(demo.router)
 app.include_router(build.router)
 app.include_router(search.router)
 app.include_router(billing.router)
+app.include_router(credits.router)
 app.include_router(preview.router)
 app.include_router(templates_routes.router)
 app.include_router(admin.router)

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from auth import get_current_user
+from credits import check_and_reserve
 from db import run_query
 
 router = APIRouter(prefix="/demo", tags=["demo"])
@@ -37,6 +38,7 @@ class VoiceDemoRequest(BaseModel):
 @router.post("/voice")
 def run_voice_demo(body: VoiceDemoRequest, user: dict = Depends(get_current_user)):
     _own_lead_or_403(body.lead_id, user)
+    check_and_reserve(user["tenant_id"], user["plan_name"], "vapi_call")
     if not AI_DEMO_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="Voice demo service not configured.")
     resp = requests.post(
@@ -98,6 +100,7 @@ class WebsitePreviewRequest(BaseModel):
 @router.post("/website")
 def build_website_preview(body: WebsitePreviewRequest, user: dict = Depends(get_current_user)):
     _own_lead_or_403(body.lead_id, user)
+    check_and_reserve(user["tenant_id"], user["plan_name"], "mockup")
     if not WEBSITE_PREVIEW_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="Website preview service not configured.")
 
@@ -153,6 +156,7 @@ def run_business_crm_demo(body: BusinessCrmDemoRequest, user: dict = Depends(get
     booking link immediately; a portal_login_url/staff_email if included
     lets the agent show the staff side too."""
     _own_lead_or_403(body.lead_id, user)
+    check_and_reserve(user["tenant_id"], user["plan_name"], "business_crm")
     if not BUSINESS_CRM_DEMO_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="Business CRM demo service not configured.")
     resp = requests.post(

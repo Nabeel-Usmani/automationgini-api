@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from auth import get_current_user
+from credits import check_and_reserve
 from db import run_query
 
 router = APIRouter(prefix="/demo", tags=["app-mockup"])
@@ -28,6 +29,7 @@ class AppMockupRequest(BaseModel):
 @router.post("/app-mockup")
 def build_app_mockup(body: AppMockupRequest, user: dict = Depends(get_current_user)):
     _own_lead_or_403(body.lead_id, user)
+    check_and_reserve(user["tenant_id"], user["plan_name"], "app_mockup")
     resp = requests.post(
         APP_MOCKUP_WEBHOOK_URL,
         json={"lead_id": body.lead_id, "agent_id": user["id"], "tenant_id": user["tenant_id"]},
