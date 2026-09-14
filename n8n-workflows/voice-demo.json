@@ -1,0 +1,109 @@
+{
+  "name": "Voice Demo",
+  "nodes": [
+    {
+      "id": "1ea28f88-c545-4889-8db1-aa688151cf24",
+      "name": "POST /voice-demo",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 96],
+      "parameters": { "httpMethod": "POST", "path": "voice-demo", "responseMode": "responseNode", "options": {} },
+      "webhookId": "9004a181-26b1-4abc-8cd9-7a3aaef8a24d"
+    },
+    {
+      "id": "37b23633-0d60-45bc-91d7-bd0bdbd43dec",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [224, 96],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "v1", "name": "lead_id", "value": "={{ $json.body?.lead_id ?? $json.lead_id }}", "type": "number" },
+            { "id": "v2", "name": "demo_type", "value": "={{ $json.body?.demo_type ?? $json.demo_type ?? \"bilingual\" }}", "type": "string" },
+            { "id": "v3", "name": "language_code", "value": "={{ $json.body?.language_code ?? $json.language_code ?? \"ar\" }}", "type": "string" },
+            { "id": "v4", "name": "agent_id", "value": "={{ $json.body?.agent_id ?? $json.agent_id }}", "type": "number" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c89afff0-23ea-46cc-82ef-030ecacc16b6",
+      "name": "Fetch Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [448, 96],
+      "parameters": { "operation": "executeQuery", "query": "SELECT business_name, phone_number, tenant_id FROM gmaps_leads WHERE id = $1;", "options": { "queryReplacement": "={{ $json.lead_id }}" } },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "a86fe7a4-32a7-40a0-a1bc-2219afb5e015",
+      "name": "Has Phone Number?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [672, 96],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.phone_number }}", "operator": { "type": "string", "operation": "notEmpty" }, "rightValue": "" }], "combinator": "and" } }
+    },
+    {
+      "id": "57a800f1-1bcb-4968-97a0-077b355b6772",
+      "name": "Place Vapi Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [896, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call/phone",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"assistantId\": \"REPLACE_WITH_VAPI_ASSISTANT_ID\", \"phoneNumberId\": \"REPLACE_WITH_VAPI_PHONE_NUMBER_ID\", \"customer\": { \"number\": $json.phone_number } } }}",
+        "options": {}
+      },
+      "credentials": { "httpHeaderAuth": { "name": "VAPI" } }
+    },
+    {
+      "id": "7d4847b9-4c3a-4113-9f34-006dedb34d0f",
+      "name": "Log Usage",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1120, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO usage_log (tenant_id, agent_id, lead_id, event_type, estimated_cost, detail) VALUES ($1,$2,$3,'vapi_call',0,'Voice demo call placed');",
+        "options": { "queryReplacement": "={{ $(\"Fetch Lead\").item.json.tenant_id }},{{ $(\"Normalize Input\").item.json.agent_id }},{{ $(\"Normalize Input\").item.json.lead_id }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "90bae38c-80bd-4c30-893e-046f24873ae7",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1344, 0],
+      "parameters": { "respondWith": "json", "responseBody": "={{ { \"success\": true } }}", "options": {} }
+    },
+    {
+      "id": "b2c58513-6a56-427a-97a0-89016157e828",
+      "name": "Respond No Phone",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [896, 192],
+      "parameters": { "respondWith": "json", "responseBody": "={{ { \"success\": false, \"error\": \"Lead has no phone number on file.\" } }}", "options": { "responseCode": 400 } }
+    }
+  ],
+  "connections": {
+    "POST /voice-demo": { "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]] },
+    "Normalize Input": { "main": [[{ "node": "Fetch Lead", "type": "main", "index": 0 }]] },
+    "Fetch Lead": { "main": [[{ "node": "Has Phone Number?", "type": "main", "index": 0 }]] },
+    "Has Phone Number?": { "main": [[{ "node": "Place Vapi Call", "type": "main", "index": 0 }], [{ "node": "Respond No Phone", "type": "main", "index": 0 }]] },
+    "Place Vapi Call": { "main": [[{ "node": "Log Usage", "type": "main", "index": 0 }]] },
+    "Log Usage": { "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "n8nWorkflowId": "2lbS6xFk8JKFPc9I",
+  "notes": "TESTED: routing + DB logic verified end-to-end (the 'no phone number' branch fired correctly against real seed data). NOT YET TESTED: the actual Vapi call, because 'Place Vapi Call' still has literal placeholder strings REPLACE_WITH_VAPI_ASSISTANT_ID and REPLACE_WITH_VAPI_PHONE_NUMBER_ID in its jsonBody - create an Assistant and a phone number in the Vapi dashboard, then update those two literals with the real IDs before this can place real calls."
+}
