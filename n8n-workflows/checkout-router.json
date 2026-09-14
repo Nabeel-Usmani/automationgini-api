@@ -1,0 +1,117 @@
+{
+  "name": "Checkout Router",
+  "nodes": [
+    {
+      "id": "f9e451f2-5ff0-4eb1-abea-b754dc83a664",
+      "name": "POST /checkout",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 96],
+      "parameters": { "httpMethod": "POST", "path": "checkout", "responseMode": "responseNode", "options": {} },
+      "webhookId": "ff168973-6e7b-44b3-96b6-257cb6c07e3a"
+    },
+    {
+      "id": "1821b074-4870-41d6-b15a-3840dedab113",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [224, 96],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "b1", "name": "product_type", "value": "={{ $json.body?.product_type ?? $json.product_type }}", "type": "string" },
+            { "id": "b2", "name": "lead_id", "value": "={{ $json.body?.lead_id ?? $json.lead_id }}", "type": "number" },
+            { "id": "b3", "name": "tenant_id", "value": "={{ $json.body?.tenant_id ?? $json.tenant_id }}", "type": "number" },
+            { "id": "b4", "name": "agent_id", "value": "={{ $json.body?.agent_id ?? $json.agent_id }}", "type": "number" },
+            { "id": "b5", "name": "build_config", "value": "={{ $json.body?.build_config ?? $json.build_config }}", "type": "object" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0896721a-ae8b-45c8-af8c-2acaf3129277",
+      "name": "Route By Product Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [448, 96],
+      "parameters": {
+        "rules": { "values": [{ "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.product_type }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "business_crm" }], "combinator": "and" }, "renameOutput": true, "outputKey": "business_crm" }] },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "Not Implemented" }
+      }
+    },
+    {
+      "id": "77508f96-72fb-46c0-9a7d-41edfac95778",
+      "name": "Build CRM Identity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [672, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "var input = $input.first().json;\nvar cfg = input.build_config || {};\nvar business = (cfg.business_name || \"Business\").toString();\nvar base = business.toLowerCase().replace(/[^a-z0-9]+/g, \"-\").replace(/(^-|-$)/g, \"\").slice(0, 40) || \"business\";\nvar suffix = Math.random().toString(36).slice(2, 7);\nvar slug = base + \"-\" + suffix;\nvar inviteToken = Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);\nreturn [{ json: { lead_id: input.lead_id, tenant_id: input.tenant_id, agent_id: input.agent_id, business_name: business, slug: slug, owner_email: (cfg.owner_email || \"\").toLowerCase(), owner_full_name: cfg.owner_full_name || \"\", timezone: cfg.timezone || \"America/New_York\", invite_token: inviteToken } }];"
+      }
+    },
+    {
+      "id": "e6c2df6e-34a9-4abc-bba6-f156e5e61b7d",
+      "name": "Insert Workspace",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [896, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_workspaces (tenant_id, agent_id, lead_id, business_name, slug, is_demo, status, timezone) VALUES ($1,$2,$3,$4,$5,false,'active',$6) RETURNING id, slug;",
+        "options": { "queryReplacement": "={{ $json.tenant_id }},{{ $json.agent_id }},{{ $json.lead_id }},{{ $json.business_name }},{{ $json.slug }},{{ $json.timezone }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "845905d3-5f0d-4dfc-a013-4e7b7e998158",
+      "name": "Insert Staff",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1120, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_staff (workspace_id, email, full_name, role, invite_token, invite_expires_at, is_active) VALUES ($1,$2,$3,'owner',$4, NOW() + interval '7 days', true) RETURNING id;",
+        "options": { "queryReplacement": "={{ $(\"Insert Workspace\").item.json.id }},{{ $(\"Build CRM Identity\").item.json.owner_email }},{{ $(\"Build CRM Identity\").item.json.owner_full_name }},{{ $(\"Build CRM Identity\").item.json.invite_token }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "1bf5a232-4647-4b52-ac76-11203d002130",
+      "name": "Respond Business CRM Created",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1344, 0],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"slug\": $(\"Insert Workspace\").item.json.slug, \"workspace_id\": $(\"Insert Workspace\").item.json.id, \"invite_url\": \"https://crm.automationgini.com/portal/set-password?token=\" + $(\"Build CRM Identity\").item.json.invite_token } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "c21d8ea9-e1b0-4ea0-afa7-56f2ce734c66",
+      "name": "Respond Not Implemented",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [672, 192],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": \"This product type is not configured yet.\" } }}",
+        "options": { "responseCode": 501 }
+      }
+    }
+  ],
+  "connections": {
+    "POST /checkout": { "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]] },
+    "Normalize Input": { "main": [[{ "node": "Route By Product Type", "type": "main", "index": 0 }]] },
+    "Route By Product Type": { "main": [[{ "node": "Build CRM Identity", "type": "main", "index": 0 }], [{ "node": "Respond Not Implemented", "type": "main", "index": 0 }]] },
+    "Build CRM Identity": { "main": [[{ "node": "Insert Workspace", "type": "main", "index": 0 }]] },
+    "Insert Workspace": { "main": [[{ "node": "Insert Staff", "type": "main", "index": 0 }]] },
+    "Insert Staff": { "main": [[{ "node": "Respond Business CRM Created", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "n8nWorkflowId": "hr56DcIeC1ap6NM7",
+  "notes": "voice_agent and website_* product types fall through to the 'Respond Not Implemented' branch (501) until Vapi.ai and Anthropic credentials are configured in n8n. The business_crm branch does not yet insert crm_services rows from build_config.services - a v1 simplification; add a Split Out + per-item Insert Service branch off 'Insert Workspace' when ready."
+}
