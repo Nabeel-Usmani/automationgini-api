@@ -1,0 +1,156 @@
+{
+  "name": "Business CRM Demo",
+  "nodes": [
+    {
+      "id": "d1b1a815-74f6-42eb-b7b2-6f0d8bd873ab",
+      "name": "POST /business-crm-demo",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": { "httpMethod": "POST", "path": "business-crm-demo", "responseMode": "responseNode", "options": {} },
+      "webhookId": "bc660bd5-6a74-4317-adfc-442f022c5dcf"
+    },
+    {
+      "id": "7638e694-34df-4269-960d-6275cfc5a27f",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [224, 0],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "lead_id", "value": "={{ $json.body?.lead_id ?? $json.lead_id }}", "type": "number" },
+            { "id": "a2", "name": "tenant_id", "value": "={{ $json.body?.tenant_id ?? $json.tenant_id }}", "type": "number" },
+            { "id": "a3", "name": "agent_id", "value": "={{ $json.body?.agent_id ?? $json.agent_id }}", "type": "number" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c1bddd64-ce97-48f3-9b34-8e4367498b9e",
+      "name": "Fetch Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [448, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT business_name FROM gmaps_leads WHERE id = $1 AND tenant_id = $2;",
+        "options": { "queryReplacement": "={{ $json.lead_id }},{{ $json.tenant_id }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "a5aaae23-1a21-457a-9197-e78297126737",
+      "name": "Build Demo Identity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [672, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "var business = ($input.first().json.business_name || \"Business\").toString();\nvar base = business.toLowerCase().replace(/[^a-z0-9]+/g, \"-\").replace(/(^-|-$)/g, \"\").slice(0, 40) || \"business\";\nvar suffix = Math.random().toString(36).slice(2, 7);\nvar slug = base + \"-\" + suffix;\nvar staffEmail = \"owner-\" + suffix + \"@demo.automationgini.com\";\nvar staffPassword = \"Demo\" + Math.floor(1000 + Math.random() * 9000) + \"!\";\nvar leadId = $(\"Normalize Input\").item.json.lead_id;\nvar tenantId = $(\"Normalize Input\").item.json.tenant_id;\nvar agentId = $(\"Normalize Input\").item.json.agent_id;\nreturn [{ json: { lead_id: leadId, tenant_id: tenantId, agent_id: agentId, business_name: business, slug: slug, staff_email: staffEmail, staff_password: staffPassword } }];"
+      }
+    },
+    {
+      "id": "86af945f-f914-4390-9bb6-ce7443d3c13d",
+      "name": "Ensure Pgcrypto Extension",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [896, 0],
+      "parameters": { "operation": "executeQuery", "query": "CREATE EXTENSION IF NOT EXISTS pgcrypto;" },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "1da29183-6397-44bf-9377-d4bbe12846ad",
+      "name": "Insert Workspace",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1120, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_workspaces (tenant_id, agent_id, lead_id, business_name, slug, is_demo, status) VALUES ($1,$2,$3,$4,$5,true,'active') RETURNING id, slug;",
+        "options": { "queryReplacement": "={{ $(\"Build Demo Identity\").item.json.tenant_id }},{{ $(\"Build Demo Identity\").item.json.agent_id }},{{ $(\"Build Demo Identity\").item.json.lead_id }},{{ $(\"Build Demo Identity\").item.json.business_name }},{{ $(\"Build Demo Identity\").item.json.slug }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "151f75c5-c807-4c37-855c-5a5157034c05",
+      "name": "Insert Staff",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1344, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_staff (workspace_id, email, password_hash, full_name, role, is_active) VALUES ($1,$2,crypt($3, gen_salt('bf')),'Demo Owner','owner',true) RETURNING id;",
+        "options": { "queryReplacement": "={{ $(\"Insert Workspace\").item.json.id }},{{ $(\"Build Demo Identity\").item.json.staff_email }},{{ $(\"Build Demo Identity\").item.json.staff_password }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "74416888-10af-4d3e-a7c0-855e80d98613",
+      "name": "Insert Service - Consultation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1568, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_services (workspace_id, name, duration_minutes, active) VALUES ($1,'Consultation',30,true) RETURNING id;",
+        "options": { "queryReplacement": "={{ $(\"Insert Workspace\").item.json.id }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "e8bf506c-9ddc-4473-98cd-3f7eb199087e",
+      "name": "Insert Service - Standard Appointment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1792, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_services (workspace_id, name, duration_minutes, price_cents, active) VALUES ($1,'Standard Appointment',60,5000,true) RETURNING id;",
+        "options": { "queryReplacement": "={{ $(\"Insert Workspace\").item.json.id }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "e07d0f11-803a-4cb2-8268-15db9d71b067",
+      "name": "Insert Sample Appointments",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [2016, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_appointments (workspace_id, service_id, staff_id, customer_name, customer_email, starts_at, ends_at, status, source) VALUES ($1,$2,$3,'Jordan Ellis','jordan.ellis@example.com', NOW() + interval '1 day' + interval '10 hour', NOW() + interval '1 day' + interval '10 hour' + interval '30 minutes', 'booked', 'staff_manual'), ($1,$4,$3,'Morgan Lee','morgan.lee@example.com', NOW() + interval '2 day' + interval '14 hour', NOW() + interval '2 day' + interval '14 hour' + interval '60 minutes', 'booked', 'staff_manual');",
+        "options": { "queryReplacement": "={{ $(\"Insert Workspace\").item.json.id }},{{ $(\"Insert Service - Consultation\").item.json.id }},{{ $(\"Insert Staff\").item.json.id }},{{ $(\"Insert Service - Standard Appointment\").item.json.id }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "e83004cc-edd4-4daa-a048-b9e1de91c0f6",
+      "name": "Respond With Demo Details",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2240, 0],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"slug\": $(\"Insert Workspace\").item.json.slug, \"portal_login_url\": \"https://crm.automationgini.com/portal/login\", \"staff_email\": $(\"Build Demo Identity\").item.json.staff_email, \"staff_password\": $(\"Build Demo Identity\").item.json.staff_password } }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "POST /business-crm-demo": { "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]] },
+    "Normalize Input": { "main": [[{ "node": "Fetch Lead", "type": "main", "index": 0 }]] },
+    "Fetch Lead": { "main": [[{ "node": "Build Demo Identity", "type": "main", "index": 0 }]] },
+    "Build Demo Identity": { "main": [[{ "node": "Ensure Pgcrypto Extension", "type": "main", "index": 0 }]] },
+    "Ensure Pgcrypto Extension": { "main": [[{ "node": "Insert Workspace", "type": "main", "index": 0 }]] },
+    "Insert Workspace": { "main": [[{ "node": "Insert Staff", "type": "main", "index": 0 }]] },
+    "Insert Staff": { "main": [[{ "node": "Insert Service - Consultation", "type": "main", "index": 0 }]] },
+    "Insert Service - Consultation": { "main": [[{ "node": "Insert Service - Standard Appointment", "type": "main", "index": 0 }]] },
+    "Insert Service - Standard Appointment": { "main": [[{ "node": "Insert Sample Appointments", "type": "main", "index": 0 }]] },
+    "Insert Sample Appointments": { "main": [[{ "node": "Respond With Demo Details", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "n8nWorkflowId": "bCbMvgaZY03WS6Xd"
+}
