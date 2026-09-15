@@ -60,7 +60,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { \"assistantId\": \"REPLACE_WITH_VAPI_ASSISTANT_ID\", \"phoneNumberId\": \"REPLACE_WITH_VAPI_PHONE_NUMBER_ID\", \"customer\": { \"number\": $json.phone_number } } }}",
+        "jsonBody": "={{ { \"assistantId\": \"decf235d-5623-443f-87b7-969208a1f901\", \"phoneNumberId\": \"c1b640be-8c02-4ddf-b7aa-3452eb14ff34\", \"customer\": { \"number\": $json.phone_number } } }}",
         "options": {}
       },
       "credentials": { "httpHeaderAuth": { "name": "VAPI" } }
@@ -105,5 +105,5 @@
   },
   "settings": { "executionOrder": "v1" },
   "n8nWorkflowId": "2lbS6xFk8JKFPc9I",
-  "notes": "TESTED: routing + DB logic verified end-to-end (the 'no phone number' branch fired correctly against real seed data). NOT YET TESTED: the actual Vapi call, because 'Place Vapi Call' still has literal placeholder strings REPLACE_WITH_VAPI_ASSISTANT_ID and REPLACE_WITH_VAPI_PHONE_NUMBER_ID in its jsonBody - create an Assistant and a phone number in the Vapi dashboard, then update those two literals with the real IDs before this can place real calls."
+  "notes": "TESTED: routing + DB logic verified end-to-end (the 'no phone number' branch fired correctly against real seed data). Real Vapi assistantId and phoneNumberId are now wired in (from the user's Vapi dashboard), but the live call itself has NOT been test-fired - the user opted to skip a live test call and verify later via a real lead in the CRM instead."
 }
