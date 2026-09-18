@@ -25,7 +25,10 @@
             { "id": "b2", "name": "lead_id", "value": "={{ $json.body?.lead_id ?? $json.lead_id }}", "type": "number" },
             { "id": "b3", "name": "tenant_id", "value": "={{ $json.body?.tenant_id ?? $json.tenant_id }}", "type": "number" },
             { "id": "b4", "name": "agent_id", "value": "={{ $json.body?.agent_id ?? $json.agent_id }}", "type": "number" },
-            { "id": "b5", "name": "build_config", "value": "={{ $json.body?.build_config ?? $json.build_config }}", "type": "object" }
+            { "id": "b5", "name": "build_config", "value": "={{ $json.body?.build_config ?? $json.build_config }}", "type": "object" },
+            { "id": "b6", "name": "byok_key", "value": "={{ $json.body?.byok_key ?? $json.byok_key ?? \"\" }}", "type": "string" },
+            { "id": "b7", "name": "custom_instructions", "value": "={{ $json.body?.custom_instructions ?? $json.custom_instructions ?? \"\" }}", "type": "string" },
+            { "id": "b8", "name": "language_code", "value": "={{ $json.body?.language_code ?? $json.language_code ?? \"\" }}", "type": "string" }
           ]
         }
       }
@@ -37,7 +40,10 @@
       "typeVersion": 3.4,
       "position": [448, 96],
       "parameters": {
-        "rules": { "values": [{ "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.product_type }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "business_crm" }], "combinator": "and" }, "renameOutput": true, "outputKey": "business_crm" }] },
+        "rules": { "values": [
+          { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.product_type }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "business_crm" }], "combinator": "and" }, "renameOutput": true, "outputKey": "business_crm" },
+          { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.product_type }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "voice_agent" }], "combinator": "and" }, "renameOutput": true, "outputKey": "voice_agent" }
+        ] },
         "options": { "fallbackOutput": "extra", "renameFallbackOutput": "Not Implemented" }
       }
     },
@@ -101,17 +107,118 @@
         "responseBody": "={{ { \"success\": false, \"error\": \"This product type is not configured yet.\" } }}",
         "options": { "responseCode": 501 }
       }
+    },
+    {
+      "id": "5c79c9a2-cc2c-4e90-be36-5868444791f3",
+      "name": "Fetch Lead For Voice",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [672, 300],
+      "parameters": { "operation": "executeQuery", "query": "SELECT business_name, phone_number FROM gmaps_leads WHERE id = $1;", "options": { "queryReplacement": "={{ $json.lead_id }}" } },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "fcf1faf2-9adb-4452-8b08-05f491835e66",
+      "name": "Build Voice Agent Identity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [896, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "var lead = $input.first().json;\nvar norm = $(\"Normalize Input\").item.json;\nvar business = lead.business_name || \"the business\";\nvar bilingualNote = norm.language_code ? (\" You are bilingual: greet callers and offer to continue in \" + norm.language_code + \" or English, then follow their preference.\") : \"\";\nvar custom = norm.custom_instructions ? (\" \" + norm.custom_instructions) : \"\";\nvar systemPrompt = \"You are the AI phone receptionist for \" + business + \". Be warm, concise, and helpful. Answer questions about the business, take messages, and offer to schedule callbacks when you can't help directly.\" + bilingualNote + custom;\nvar firstMessage = \"Hi, thanks for calling \" + business + \"! How can I help you today?\";\nreturn [{ json: { lead_id: norm.lead_id, tenant_id: norm.tenant_id, agent_id: norm.agent_id, byok_key: norm.byok_key, business_name: business, system_prompt: systemPrompt, first_message: firstMessage } }];"
+      }
+    },
+    {
+      "id": "43d0bb3e-54fd-4a02-8380-83b5779641c7",
+      "name": "Create Vapi Assistant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1120, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/assistant",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $json.byok_key }}" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"name\": $json.business_name + \" Receptionist\", \"firstMessage\": $json.first_message, \"model\": { \"provider\": \"openai\", \"model\": \"gpt-4o-mini\", \"messages\": [ { \"role\": \"system\", \"content\": $json.system_prompt } ] }, \"voice\": { \"provider\": \"vapi\", \"voiceId\": \"Elliot\" } } }}",
+        "options": {}
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "a46632f2-511a-4f38-b95a-e59bf38ca0a0",
+      "name": "Create Vapi Phone Number",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1344, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/phone-number",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $(\"Build Voice Agent Identity\").item.json.byok_key }}" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"provider\": \"vapi\", \"assistantId\": $json.id, \"name\": $(\"Build Voice Agent Identity\").item.json.business_name + \" Line\" } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "e5533464-36f4-4bcf-b620-ff17fcad28c4",
+      "name": "Insert Voice Agent Purchase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1568, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO purchases (tenant_id, agent_id, lead_id, product_type, payment_status, fulfillment_status, fulfillment_detail, fulfilled_at) VALUES ($1,$2,$3,'voice_agent','free','completed', jsonb_build_object('vapi_assistant_id',$4::text,'vapi_phone_number_id',$5::text,'vapi_phone_number',$6::text), NOW()) RETURNING id;",
+        "options": { "queryReplacement": "={{ $(\"Build Voice Agent Identity\").item.json.tenant_id }},{{ $(\"Build Voice Agent Identity\").item.json.agent_id }},{{ $(\"Build Voice Agent Identity\").item.json.lead_id }},{{ $(\"Create Vapi Assistant\").item.json.id }},{{ $json.id }},{{ $json.number }}" }
+      },
+      "credentials": { "postgres": { "name": "AutomationGini Postgres" } }
+    },
+    {
+      "id": "82d016db-7115-461f-a4c6-f6be5720615c",
+      "name": "Respond Voice Agent Created",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1792, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"purchase_id\": $(\"Insert Voice Agent Purchase\").item.json.id, \"phone_number\": $(\"Create Vapi Phone Number\").item.json.number } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "2cae500c-9dae-4bee-804b-34cd978f3721",
+      "name": "Respond Invalid Vapi Key",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1120, 460],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": \"That Vapi API key was rejected. Double check the client's Vapi private key and try again.\" } }}",
+        "options": { "responseCode": 400 }
+      }
     }
   ],
   "connections": {
     "POST /checkout": { "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]] },
     "Normalize Input": { "main": [[{ "node": "Route By Product Type", "type": "main", "index": 0 }]] },
-    "Route By Product Type": { "main": [[{ "node": "Build CRM Identity", "type": "main", "index": 0 }], [{ "node": "Respond Not Implemented", "type": "main", "index": 0 }]] },
+    "Route By Product Type": { "main": [[{ "node": "Build CRM Identity", "type": "main", "index": 0 }], [{ "node": "Fetch Lead For Voice", "type": "main", "index": 0 }], [{ "node": "Respond Not Implemented", "type": "main", "index": 0 }]] },
     "Build CRM Identity": { "main": [[{ "node": "Insert Workspace", "type": "main", "index": 0 }]] },
     "Insert Workspace": { "main": [[{ "node": "Insert Staff", "type": "main", "index": 0 }]] },
-    "Insert Staff": { "main": [[{ "node": "Respond Business CRM Created", "type": "main", "index": 0 }]] }
+    "Insert Staff": { "main": [[{ "node": "Respond Business CRM Created", "type": "main", "index": 0 }]] },
+    "Fetch Lead For Voice": { "main": [[{ "node": "Build Voice Agent Identity", "type": "main", "index": 0 }]] },
+    "Build Voice Agent Identity": { "main": [[{ "node": "Create Vapi Assistant", "type": "main", "index": 0 }]] },
+    "Create Vapi Assistant": { "main": [[{ "node": "Create Vapi Phone Number", "type": "main", "index": 0 }], [{ "node": "Respond Invalid Vapi Key", "type": "main", "index": 0 }]] },
+    "Create Vapi Phone Number": { "main": [[{ "node": "Insert Voice Agent Purchase", "type": "main", "index": 0 }]] },
+    "Insert Voice Agent Purchase": { "main": [[{ "node": "Respond Voice Agent Created", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" },
   "n8nWorkflowId": "hr56DcIeC1ap6NM7",
-  "notes": "voice_agent and website_* product types fall through to the 'Respond Not Implemented' branch (501) until Vapi.ai and Anthropic credentials are configured in n8n. The business_crm branch does not yet insert crm_services rows from build_config.services - a v1 simplification; add a Split Out + per-item Insert Service branch off 'Insert Workspace' when ready."
+  "notes": "website_* product types still fall through to the 'Respond Not Implemented' branch (501) until Anthropic has billing configured. business_crm doesn't yet insert crm_services rows from build_config.services (v1 simplification). voice_agent creates a real Vapi Assistant + phone number directly on the CLIENT's own Vapi account via their byok_key (sent as a per-request Authorization header, never stored) - tested against the real Vapi API with an intentionally-wrong key to verify routing, prompt construction, and the invalid-key error path; the happy path (a real client key) has not been fired for real yet."
 }
