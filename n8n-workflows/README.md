@@ -29,5 +29,18 @@ scratch.
 | File | Webhook path | Purpose |
 |---|---|---|
 | `business-crm-demo.json` | `POST /webhook/business-crm-demo` | Provisions a free demo Business CRM workspace (staff portal + booking page) for a lead. Called by `POST /demo/business-crm` in this repo. |
-| `checkout-router.json` | `POST /webhook/checkout` | Shared checkout endpoint for all Build products (`CHECKOUT_WEBHOOK_URL`). Routes by `product_type`. Only `business_crm` is implemented so far (real workspace + owner invite link); `voice_agent` and `website_*` return 501 until Vapi.ai / Anthropic credentials are set up in n8n. See the file's `notes` field for what's still missing (e.g. the `services` list from `build_config` isn't inserted yet). |
-| `voice-demo.json` | `POST /webhook/voice-demo` | Places a bilingual AI voice-agent demo call via Vapi and logs it to `usage_log`. Called by `POST /demo/voice`. Routing + DB logic tested end-to-end; the actual Vapi call is NOT yet live - the `Place Vapi Call` node's `assistantId`/`phoneNumberId` are still literal placeholder strings pending a Vapi Assistant + phone number being created in the Vapi dashboard. |
+| `checkout-router.json` | `POST /webhook/checkout` | Shared checkout endpoint for all Build products (`CHECKOUT_WEBHOOK_URL`). Routes by `product_type`. `business_crm` (real workspace + owner invite link) and `voice_agent` (real Vapi Assistant + phone number on the client's own BYOK account) are implemented and free for now - no Stripe wired up yet, by design. `website_*` still returns 501 until Anthropic has billing configured. See the file's `notes` field for details. |
+| `voice-demo.json` | `POST /webhook/voice-demo` | Places a bilingual AI voice-agent demo call via Vapi and logs it to `usage_log`. Called by `POST /demo/voice`. Fully wired with real Vapi assistant/phone number IDs and tested end-to-end (routing + DB logic); the live call itself hasn't been test-fired since the user opted to verify via a real lead in the CRM instead. |
+
+## Free-for-now products (no Stripe yet)
+
+`business_crm` ($199 in the CRM UI) and `voice_agent` ($50) both currently
+provision immediately for free - Checkout Router never talks to Stripe. The
+CRM's own Build pages (`BusinessCrm.jsx`, `VoiceAgent.jsx` in
+automationgini-crmv2) were updated to match: they show the created
+result/invite link/phone number inline instead of expecting a `checkout_url`
+redirect, since the API's checkout endpoints only return `checkout_url` once
+Stripe is actually wired up. When Stripe is added, `Checkout Router` should
+create a real Checkout Session and return `checkout_url` for these two
+product types too, and actual provisioning should move to a Stripe webhook
+receiver workflow that runs after payment confirms.
