@@ -1,0 +1,132 @@
+{
+  "name": "Email Automation - Send Engine",
+  "n8nWorkflowId": "RyhvjR0xWYA82be1",
+  "nodes": [
+    {
+      "id": "c930f8f6-444c-4cd1-906f-3ed075062c8f",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 96],
+      "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] } }
+    },
+    {
+      "id": "ecd7e031-db5e-45b4-b966-cda2469e4410",
+      "name": "Fetch Due Sequences",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [224, 96],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "SELECT s.id AS sequence_id, s.tenant_id, s.agent_id, s.lead_id, s.sequence_type, s.demo_url, s.screenshot_url, s.step, l.business_name, l.email FROM lead_email_sequences s JOIN gmaps_leads l ON l.id = s.lead_id WHERE s.status = 'active' AND l.email IS NOT NULL AND l.email <> '' AND (s.step = 0 OR (s.step BETWEEN 1 AND 4 AND s.last_sent_at <= NOW() - INTERVAL '24 hours')) ORDER BY s.step ASC, s.last_sent_at ASC NULLS FIRST LIMIT 50;",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "e1d7f0ea-4faa-45c7-baf4-44f98c950497",
+      "name": "Build Email Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 96],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const item = $input.item.json;\nconst step = Number(item.step) || 0;\nconst nextStep = step + 1;\nconst emailType = nextStep === 1 ? 'initial' : ('followup_' + (nextStep - 1));\nconst isWebsite = item.sequence_type === 'website_demo';\nconst bizName = item.business_name || 'there';\nconst demoLine = item.demo_url ? ('Take a look here: ' + item.demo_url) : '';\nconst productLabel = isWebsite ? 'a free mockup of what your website could look like' : 'a live demo of an AI chatbot for your website';\n\nlet subject = '';\nlet html = '';\n\nif (nextStep === 1) {\n  subject = isWebsite ? ('A free website mockup for ' + bizName) : ('A quick chatbot demo for ' + bizName);\n  html = '<p>Hi ' + bizName + ',</p>' +\n    '<p>I put together ' + productLabel + '. ' + demoLine + '</p>' +\n    '<p>No obligation, just wanted to show you what is possible. Happy to answer any questions.</p>' +\n    '<p>Best,<br>Nabeel</p>';\n} else {\n  subject = 'Following up - ' + bizName;\n  html = '<p>Hi ' + bizName + ',</p>' +\n    '<p>Just following up on the ' + (isWebsite ? 'website mockup' : 'chatbot demo') + ' I sent over. ' + demoLine + '</p>' +\n    '<p>Let me know if you would like to move forward or have any questions.</p>' +\n    '<p>Best,<br>Nabeel</p>';\n}\n\nconst newStatus = nextStep >= 5 ? 'completed_no_reply' : 'active';\n\nreturn {\n  json: {\n    sequence_id: item.sequence_id,\n    tenant_id: item.tenant_id,\n    lead_id: item.lead_id,\n    email: item.email,\n    business_name: bizName,\n    next_step: nextStep,\n    email_type: emailType,\n    subject: subject,\n    html: html,\n    new_status: newStatus\n  }\n};"
+      }
+    },
+    {
+      "id": "2b344824-6eb6-4e99-8e1e-42cb9caaa4df",
+      "name": "Send Outreach Email",
+      "type": "n8n-nodes-base.sendInBlue",
+      "typeVersion": 1,
+      "position": [672, 96],
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "sendHTML": true,
+        "subject": "={{ $json.subject }}",
+        "htmlContent": "={{ $json.html }}",
+        "sender": "nabeel@automationgini.com",
+        "receipients": "={{ $json.email }}",
+        "additionalFields": {}
+      },
+      "onError": "continueErrorOutput",
+      "credentials": { "sendInBlueApi": { "name": "Brevo" } }
+    },
+    {
+      "id": "a4349861-02dd-4d14-a5b1-74a0ba75908e",
+      "name": "Log Email Send",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [896, 0],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "INSERT INTO lead_email_sends (sequence_id, step, email_type, message_id, subject, html) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$(\"Build Email Content\").item.json.sequence_id, $(\"Build Email Content\").item.json.next_step, $(\"Build Email Content\").item.json.email_type, $json.messageId ?? \"\", $(\"Build Email Content\").item.json.subject, $(\"Build Email Content\").item.json.html] }}"
+        }
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "627b27cd-fc80-4dad-aa03-a636322601fe",
+      "name": "Update Sequence Progress",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1120, 0],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "UPDATE lead_email_sequences SET step = $1, status = $2, last_sent_at = NOW() WHERE id = $3;",
+        "options": {
+          "queryReplacement": "={{ [$(\"Build Email Content\").item.json.next_step, $(\"Build Email Content\").item.json.new_status, $(\"Build Email Content\").item.json.sequence_id] }}"
+        }
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "5fdc8c8a-0eb2-412b-b188-fb0ef1ff2a0f",
+      "name": "Mark Send Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [896, 192],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "UPDATE lead_email_sequences SET status = 'failed' WHERE id = $1;",
+        "options": {
+          "queryReplacement": "={{ [$(\"Build Email Content\").item.json.sequence_id] }}"
+        }
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "8ef74887-47c3-4fc6-a8e7-0957973a5198",
+      "name": "Sticky Note f363635f",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-50, -50],
+      "parameters": {
+        "content": "## Email Automation - Send Engine (v1)\n\nHandles the SENDING side only: finds active sequences due for their next email (initial at step 0, follow-ups every 24h up to step 4), sends via Brevo, logs to lead_email_sends, and advances step/status.\n\nNot included yet (needs an Anthropic billing fix first): automatic enrollment of new leads into a sequence, which requires generating the actual website mockup or chatbot demo per lead. Until that ships, leads must be enrolled into lead_email_sequences some other way (e.g. a manual insert) for this engine to pick them up.\n\nReply capture is already handled by POST /webhooks/inbound-reply in the API. No n8n work needed there.\n\nRequires a Brevo credential named \"Brevo\" (sendInBlueApi) to be attached to the Send Outreach Email node.",
+        "width": 300,
+        "height": 200
+      }
+    }
+  ],
+  "connections": {
+    "Every Hour": { "main": [[{ "node": "Fetch Due Sequences", "type": "main", "index": 0 }]] },
+    "Fetch Due Sequences": { "main": [[{ "node": "Build Email Content", "type": "main", "index": 0 }]] },
+    "Build Email Content": { "main": [[{ "node": "Send Outreach Email", "type": "main", "index": 0 }]] },
+    "Send Outreach Email": {
+      "main": [
+        [{ "node": "Log Email Send", "type": "main", "index": 0 }],
+        [{ "node": "Mark Send Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Log Email Send": { "main": [[{ "node": "Update Sequence Progress", "type": "main", "index": 0 }]] }
+  },
+  "notes": "Status: built and verified (real 'Fetch Due Sequences' execution against the live DB returned 0 rows, as expected since no leads are enrolled yet), but NOT YET PUBLISHED - blocked on a Brevo credential (type sendInBlueApi, named 'Brevo') that has not been created in n8n yet. Once added and attached to the 'Send Outreach Email' node, publish the workflow to activate the hourly schedule. Scope: send-engine only (finds due sequences, sends via Brevo, logs to lead_email_sends, advances step/status, marks status='failed' on a Brevo send error). Auto-enrollment (deciding website_demo vs chatbot_demo per new lead and generating the referenced AI demo) is out of scope for this workflow - it depends on the same blocked Anthropic billing issue as the Website Preview/Chatbot Demo workflows, since a demo must exist before a lead can be meaningfully enrolled. Until enrollment is built, rows must be inserted into lead_email_sequences some other way for this engine to have anything to send. Reply capture (marking a sequence 'replied') is already fully handled server-side by POST /webhooks/inbound-reply - no n8n component needed for that."
+}
